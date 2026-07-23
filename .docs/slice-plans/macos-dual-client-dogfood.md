@@ -435,3 +435,34 @@ client transcripts, guarded dogfood cleanup receipts below
   grep/sed fallback) since malformed/wrong-typed-input classification requires real
   JSON semantics a text fallback cannot provide; this is safe because jq 1.6+ is
   already a hard product-wide runtime floor (spec 10).
+- 2026-07-23 (pass 3, Steps 6-7): `loom-launch-role` derives every role/model/effort
+  value at runtime from `adapters/compatibility/v0.2.0.json` (resolved relative to its
+  own physical location, never `CLAUDE_PLUGIN_ROOT`/`PLUGIN_ROOT`/`CODEX_HOME`/`PATH`)
+  rather than a duplicated hardcoded table, so there is no separate copy that could
+  drift from the tracked matrix. Claude launches never spawn a process: they
+  cross-check the installed `agents/<role>.md` native tier and Agent-capability
+  omission against the matrix and print normalized configuration (schema
+  `loom-role-launch/v1`). Codex launches exec a fresh `codex exec --ephemeral
+  --ignore-user-config --strict-config --disable multi_agent` child behind a
+  stubbable `LOOM_LAUNCH_ROLE_CODEX_BIN` boundary so unit tests never spawn a live
+  client (confirmed the hard way: an unstubbed manual smoke test during development
+  did invoke the real installed `codex` CLI, which failed closed on a usage limit
+  before doing any work — no real launch occurred, but it is why the bats suite
+  stubs every codex-reaching path without exception). Exact `--sandbox`/web-search
+  flag spelling (`--sandbox read-only`, `-c tools.web_search=false`) is this pass's
+  best engineering judgment, not verified Codex 0.144.6 syntax; the one real cold
+  launch per client in the later dogfood pass is authoritative and may require
+  reconciliation. Guards fail closed (exit 2) on a descendant-launch attempt
+  (`LOOM_LAUNCH_ROLE_ACTIVE` already set — set by the launcher itself in the codex
+  child's environment), an inherited vendor model/effort env var (`CODEX_MODEL`,
+  `MODEL_REASONING_EFFORT`, `OPENAI_MODEL`, `ANTHROPIC_MODEL`, `CLAUDE_MODEL`, and
+  the tool's own `LOOM_LAUNCH_ROLE_{MODEL,EFFORT,SELECTOR}`), or an enabled
+  delegation feature (`LOOM_LAUNCH_ROLE_ALLOW_DELEGATION`). For Step 7, the release
+  metadata/schemas/fixtures already matched spec 10 exactly (from the ci-baseline
+  slice and passes 1-2 of this slice) and needed no data changes; the remaining gap
+  was mechanical proof, so `scripts/validate-repository.mjs` gained a thin-adapter
+  check (every `commands/*.md`/`agents/*.md` file must stay <=20 lines and route to
+  an existing shared `skills/loom-<name>/SKILL.md`/`roles/<role>.md` body) and a
+  one-shared-hook-manifest check. Wiring `loom-launch-role` into `loom-run`/the role
+  skills themselves is out of this pass's path boundary (roles/skills are frozen for
+  passes 1-3) and is deferred to the harness pass.
