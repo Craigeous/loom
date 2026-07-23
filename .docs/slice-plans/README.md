@@ -17,8 +17,10 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-> None. `macos-dual-client-dogfood` is the next slice to plan after the program
-> amendment publication settles.
+- [macos-dual-client-dogfood.md](macos-dual-client-dogfood.md) — `Plan Review` —
+  implement and privately prove the shared Claude Code/Codex workflows, roles, hooks,
+  installed-root helper resolution, isolated install/reinstall, and clean uninstall
+  required by ADR 0024 on Apple silicon.
 
 ## Archived plans
 
