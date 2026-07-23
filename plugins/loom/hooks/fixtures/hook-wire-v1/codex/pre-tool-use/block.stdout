@@ -1,0 +1,1 @@
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"loom identity guard: blocked --author override (ADR 0003 requires the uniform commit identity)."}}

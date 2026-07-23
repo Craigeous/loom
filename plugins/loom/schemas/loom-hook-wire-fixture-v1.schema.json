@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/craigeous/loom/schemas/loom-hook-wire-fixture-v1.schema.json",
+  "description": "Structural shape of a hook-wire-v1 <case>.input.json fixture (spec 08 -> Hook normalization and output adapters). Deliberately loose on field values: the 'malformed' case fixtures are well-formed JSON with wrong-typed/unknown values by design, and must still validate structurally here — value-level policy validation (trigger enum, command string type, session_id charset) is the hook's own runtime concern, not this schema's.",
+  "type": "object",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": ["tool_input"],
+      "properties": {
+        "tool_input": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["trigger", "session_id"],
+      "properties": {
+        "trigger": { "type": "string" },
+        "session_id": { "type": "string" },
+        "cwd": { "type": "string" }
+      }
+    }
+  ]
+}

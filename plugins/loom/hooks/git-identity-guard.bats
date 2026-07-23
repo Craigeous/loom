@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
-# Test suite for git-identity-guard.sh (ADR 0003 identity guard).
-# Drives the hook with hook-shaped JSON on stdin; asserts the exit code.
+# Test suite for git-identity-guard.sh (ADR 0003 policy; spec 08 wire adapters).
+# Drives the hook with hook-shaped JSON on stdin; asserts exit code/output.
 # The code evaluator re-runs this suite as the shell gate's TEST step.
+bats_require_minimum_version 1.5.0
 
 GUARD="${BATS_TEST_DIRNAME}/git-identity-guard.sh"
 
@@ -11,34 +12,22 @@ setup_file() {
     case "$LOOM_TEST_BASH" in /*) ;; *) return 1 ;; esac
     [ -x "$LOOM_TEST_BASH" ]
     [[ "$($LOOM_TEST_BASH -c 'printf %s "$BASH_VERSION"')" =~ $LOOM_EXPECTED_BASH_VERSION ]]
+    REAL_ROOT="$(CDPATH='' cd -- "${BATS_TEST_DIRNAME}/.." && pwd -P)"
+    export REAL_ROOT
 }
 
-# guard <json> -- runs the hook with the given stdin, sets $status/$output
+# guard <json> -- runs the hook against the real (validated) Claude root
 guard() {
-    run "$LOOM_TEST_BASH" "$GUARD" <<<"$1"
+    run env CLAUDE_PLUGIN_ROOT="$REAL_ROOT" "$LOOM_TEST_BASH" "$GUARD" <<<"$1"
 }
 
-# guard_no_jq <json> -- runs the hook with a stub PATH that excludes jq,
-# forcing the grep/sed fallback branch (lines ~27-29 of the hook).
-guard_no_jq() {
-    stub="$(mktemp -d)"
-    # NOTE: the selected interpreter is invoked by absolute path so it does
-    # NOT need to be on the stubbed PATH. Symlink only what the fallback branch
-    # uses; deliberately omit jq so command -v jq fails (NO_JQ).
-    for t in cat grep sed tr wc head; do
-        for d in /usr/bin /bin; do
-            [ -x "$d/$t" ] && {
-                ln -s "$d/$t" "$stub/$t"
-                break
-            }
-        done
-    done
-    run env PATH="$stub" "$LOOM_TEST_BASH" "$GUARD" <<<"$1"
-    rm -rf "$stub"
+# guard_codex <json> -- runs the hook against the real (validated) Codex root
+guard_codex() {
+    run env PLUGIN_ROOT="$REAL_ROOT" "$LOOM_TEST_BASH" "$GUARD" <<<"$1"
 }
 
 # ---------------------------------------------------------------------------
-# BLOCK cases (exit 2) — identity override detected
+# BLOCK cases (exit 2) — identity override detected (Claude wire)
 # ---------------------------------------------------------------------------
 
 @test "BLOCK B01: commit --author= with quoted value" {
@@ -96,13 +85,20 @@ guard_no_jq() {
     [ "$status" -eq 2 ]
 }
 
+@test "BLOCK: stderr is a single control-character-free line ending in one LF" {
+    guard '{"tool_input":{"command":"git commit --author=evil -m z"}}'
+    [ "$status" -eq 2 ]
+    [ "$output" = "loom identity guard: blocked --author override (ADR 0003 requires the uniform commit identity)." ]
+}
+
 # ---------------------------------------------------------------------------
-# ALLOW cases (exit 0) — no identity override
+# ALLOW cases (exit 0) — no identity override (Claude wire)
 # ---------------------------------------------------------------------------
 
 @test "ALLOW A01: plain commit, no override" {
     guard '{"tool_input":{"command":"git commit -m \"msg\""}}'
     [ "$status" -eq 0 ]
+    [ -z "$output" ]
 }
 
 @test "ALLOW A02: -c core.* is non-identity config" {
@@ -170,21 +166,172 @@ guard_no_jq() {
     [ "$status" -eq 0 ]
 }
 
-# ---------------------------------------------------------------------------
-# Fallback cases (jq absent) — genuinely exercise the grep/sed branch
-# ---------------------------------------------------------------------------
-
-@test "FALLBACK F1: BLOCK survives jq-absent fallback (--author= override)" {
-    guard_no_jq '{"tool_input":{"command":"git commit --author=evil -m z"}}'
-    [ "$status" -eq 2 ]
-}
-
-@test "FALLBACK F2: BLOCK survives jq-absent fallback (inline GIT_AUTHOR_NAME env)" {
-    guard_no_jq '{"tool_input":{"command":"GIT_AUTHOR_NAME=Foo git commit -m z"}}'
-    [ "$status" -eq 2 ]
-}
-
-@test "FALLBACK F3: ALLOW survives jq-absent fallback (plain commit)" {
-    guard_no_jq '{"tool_input":{"command":"git commit -m z"}}'
+@test "ALLOW A15: missing tool_input.command (no target) allows, matching ADR 0003" {
+    guard '{}'
     [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# Codex wire — same policy decisions, Codex envelope (spec 08)
+# ---------------------------------------------------------------------------
+
+@test "codex ALLOW: exit 0, empty stdout/stderr" {
+    guard_codex '{"tool_input":{"command":"git commit -m ok"}}'
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "codex BLOCK: exit 0, empty stderr, exact hookSpecificOutput JSON on stdout" {
+    guard_codex '{"tool_input":{"command":"git commit --author=evil -m z"}}'
+    [ "$status" -eq 0 ]
+    expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"loom identity guard: blocked --author override (ADR 0003 requires the uniform commit identity)."}}'
+    [ "$output" = "$expected" ]
+}
+
+# ---------------------------------------------------------------------------
+# Malformed input (spec 08 fixed reason) — fails closed through the client wire
+# ---------------------------------------------------------------------------
+
+@test "malformed: invalid JSON fails closed (claude)" {
+    guard 'not json'
+    [ "$status" -eq 2 ]
+    [ "$output" = "Loom hook input invalid for pre-tool-use." ]
+}
+
+@test "malformed: invalid JSON fails closed (codex)" {
+    guard_codex 'not json'
+    [ "$status" -eq 0 ]
+    expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Loom hook input invalid for pre-tool-use."}}'
+    [ "$output" = "$expected" ]
+}
+
+@test "malformed: tool_input.command wrong type (number) fails closed" {
+    guard '{"tool_input":{"command":42}}'
+    [ "$status" -eq 2 ]
+    [ "$output" = "Loom hook input invalid for pre-tool-use." ]
+}
+
+@test "malformed: tool_input.command wrong type (array) fails closed" {
+    guard '{"tool_input":{"command":["git","commit"]}}'
+    [ "$status" -eq 2 ]
+    [ "$output" = "Loom hook input invalid for pre-tool-use." ]
+}
+
+@test "malformed: tool_input not an object fails closed" {
+    guard '{"tool_input":"nope"}'
+    [ "$status" -eq 2 ]
+    [ "$output" = "Loom hook input invalid for pre-tool-use." ]
+}
+
+# ---------------------------------------------------------------------------
+# Root/client selection (spec 10) — empty/ambiguous/mismatched roots
+# ---------------------------------------------------------------------------
+
+@test "root: neither PLUGIN_ROOT nor CLAUDE_PLUGIN_ROOT set fails closed" {
+    run env -u CLAUDE_PLUGIN_ROOT -u PLUGIN_ROOT "$LOOM_TEST_BASH" "$GUARD" <<<'{"tool_input":{"command":"git commit -m ok"}}'
+    [ "$status" -eq 2 ]
+    [ "$output" = "Loom hook input invalid for pre-tool-use." ]
+}
+
+@test "root: both PLUGIN_ROOT and CLAUDE_PLUGIN_ROOT validate (ambiguous) fails closed" {
+    run env PLUGIN_ROOT="$REAL_ROOT" CLAUDE_PLUGIN_ROOT="$REAL_ROOT" "$LOOM_TEST_BASH" "$GUARD" <<<'{"tool_input":{"command":"git commit -m ok"}}'
+    [ "$status" -eq 2 ]
+    [ "$output" = "Loom hook input invalid for pre-tool-use." ]
+}
+
+@test "root: CLAUDE_PLUGIN_ROOT pointing at a non-plugin directory fails closed" {
+    NOTROOT="$(mktemp -d)"
+    run env CLAUDE_PLUGIN_ROOT="$NOTROOT" "$LOOM_TEST_BASH" "$GUARD" <<<'{"tool_input":{"command":"git commit -m ok"}}'
+    rm -rf "$NOTROOT"
+    [ "$status" -eq 2 ]
+    [ "$output" = "Loom hook input invalid for pre-tool-use." ]
+}
+
+@test "root: relative CLAUDE_PLUGIN_ROOT fails closed" {
+    run env CLAUDE_PLUGIN_ROOT="relative/path" "$LOOM_TEST_BASH" "$GUARD" <<<'{"tool_input":{"command":"git commit -m ok"}}'
+    [ "$status" -eq 2 ]
+}
+
+@test "jq absent: fails closed (no grep/sed fallback exists for root/JSON validation)" {
+    stub="$(mktemp -d)"
+    for t in cat sed tr wc grep dirname mv mkdir cd pwd; do
+        for d in /usr/bin /bin; do
+            [ -x "$d/$t" ] && {
+                ln -s "$d/$t" "$stub/$t"
+                break
+            }
+        done
+    done
+    run env PATH="$stub" CLAUDE_PLUGIN_ROOT="$REAL_ROOT" "$LOOM_TEST_BASH" "$GUARD" <<<'{"tool_input":{"command":"git commit -m ok"}}'
+    rm -rf "$stub"
+    [ "$status" -eq 2 ]
+}
+
+# ---------------------------------------------------------------------------
+# RED-GREEN sentinel — proves the malformed-command-type guard is exercised
+# ---------------------------------------------------------------------------
+
+@test "RED-GREEN: a well-typed command still allows while a wrong-typed one is rejected" {
+    guard '{"tool_input":{"command":"git push"}}'
+    [ "$status" -eq 0 ]
+    guard '{"tool_input":{"command":7}}'
+    [ "$status" -eq 2 ]
+}
+
+# ---------------------------------------------------------------------------
+# hook-wire-v1 fixture conformance (spec 08) — pre-tool-use half of the
+# Cartesian product (claude/codex x allow/block/malformed); the precompact
+# bats suite covers the pre-compact half. Byte-exact via cmp, not string
+# comparison, so a trailing-newline/byte-count drift is caught too.
+# ---------------------------------------------------------------------------
+
+FIXTURE_ROOT="${BATS_TEST_DIRNAME}/fixtures/hook-wire-v1"
+
+fixture_env_var() {
+    case "$1" in
+    codex) printf 'PLUGIN_ROOT' ;;
+    *) printf 'CLAUDE_PLUGIN_ROOT' ;;
+    esac
+}
+
+# assert_fixture <client> <case> — byte-compares stdout/stderr/exit for
+# fixtures/hook-wire-v1/<client>/pre-tool-use/<case>.* against a live run.
+assert_fixture() {
+    local client="$1" case_name="$2" dir env_var out_file err_file actual_exit expected_exit
+    dir="$FIXTURE_ROOT/$client/pre-tool-use"
+
+    run jq -e '.tool_input | type == "object"' "$dir/$case_name.input.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "true" ]
+
+    env_var="$(fixture_env_var "$client")"
+    out_file="$(mktemp)"
+    err_file="$(mktemp)"
+    # not wrapped in `run`: an unguarded nonzero exit here (the block cases
+    # legitimately exit 2) would otherwise trip bats' own errexit and abort
+    # the test before the byte comparisons run.
+    env "$env_var=$REAL_ROOT" "$LOOM_TEST_BASH" "$GUARD" <"$dir/$case_name.input.json" >"$out_file" 2>"$err_file" && actual_exit=0 || actual_exit=$?
+    expected_exit=$(tr -d '\n' <"$dir/$case_name.exit")
+
+    cmp -s "$out_file" "$dir/$case_name.stdout"
+    local stdout_match=$?
+    cmp -s "$err_file" "$dir/$case_name.stderr"
+    local stderr_match=$?
+    rm -f "$out_file" "$err_file"
+
+    [ "$actual_exit" -eq "$expected_exit" ]
+    [ "$stdout_match" -eq 0 ]
+    [ "$stderr_match" -eq 0 ]
+}
+
+@test "fixture claude/pre-tool-use/allow" { assert_fixture claude allow; }
+
+@test "fixture claude/pre-tool-use/block" { assert_fixture claude block; }
+
+@test "fixture claude/pre-tool-use/malformed" { assert_fixture claude malformed; }
+
+@test "fixture codex/pre-tool-use/allow" { assert_fixture codex allow; }
+
+@test "fixture codex/pre-tool-use/block" { assert_fixture codex block; }
+
+@test "fixture codex/pre-tool-use/malformed" { assert_fixture codex malformed; }
