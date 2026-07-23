@@ -43,6 +43,7 @@ Only these product, test, evidence, and finalization paths may change.
 - `plugins/loom/adapters/fixtures/v0.2.0/metadata/codex-marketplace.json`
 - `plugins/loom/adapters/fixtures/v0.2.0/metadata/compatibility.json`
 - `plugins/loom/adapters/fixtures/v0.2.0/metadata/codex-root.json`
+- `plugins/loom/adapters/fixtures/v0.2.0/dogfood/macos-arm64.json`
 - `plugins/loom/adapters/roots/codex-skill-source-v1.json`
 - `plugins/loom/schemas/loom-compatibility-matrix-v1.schema.json`
 - `plugins/loom/schemas/loom-installed-root-binding-v1.schema.json`
@@ -91,13 +92,17 @@ Only these product, test, evidence, and finalization paths may change.
 
 - `plugins/loom/bin/loom-resolve-helper`
 - `plugins/loom/bin/loom-resolve-helper.bats`
+- `plugins/loom/bin/loom-launch-role`
+- `plugins/loom/bin/loom-launch-role.bats`
 - `plugins/loom/hooks/hooks.json`
-- `plugins/loom/hooks/codex-hooks.json`
 - `plugins/loom/hooks/git-identity-guard.sh`
 - `plugins/loom/hooks/git-identity-guard.bats`
 - `plugins/loom/hooks/precompact-write-ahead-backstop.sh`
 - `plugins/loom/hooks/precompact-write-ahead-backstop.bats`
 - `plugins/loom/schemas/loom-hook-wire-fixture-v1.schema.json`
+- `plugins/loom/schemas/loom-role-launch-v1.schema.json`
+- `plugins/loom/schemas/loom-dogfood-state-v1.schema.json`
+- `plugins/loom/schemas/loom-dogfood-evidence-v1.schema.json`
 
 The hook-wire fixture set is exactly the Cartesian product of clients `claude` and
 `codex`, events `pre-tool-use` and `pre-compact`, cases `allow`, `block`, and
@@ -160,6 +165,7 @@ The hook-wire fixture set is exactly the Cartesian product of clients `claude` a
 - `scripts/macos-dual-client-dogfood`
 - `scripts/tests/macos-dual-client-dogfood.bats`
 - `.docs/evaluations/macos-dual-client-dogfood-evidence.json`
+- `.docs/evaluations/macos-dual-client-dogfood-plan-eval.md`
 - `.docs/evaluations/macos-dual-client-dogfood-review-findings.md`
 - `.docs/evaluations/macos-dual-client-dogfood-eval.md`
 - `.docs/evaluations/README.md`
@@ -197,33 +203,87 @@ client transcripts, and the publication receipt remain untracked.
    helper containment, regular executable type, and symlink escape rejection before
    executing by absolute path. Never use bare `PATH`, `CODEX_HOME`, or a Claude-only
    variable for Codex workflow correctness.
-5. Split hook policy from wire output at the executable boundary. Claude retains
-   exit-2/stderr blocking. Codex uses `codex-hooks.json`, `${PLUGIN_ROOT}`, exit 0,
-   and the exact JSON envelopes in spec 08. Both accept current `trigger`; malformed,
-   missing, wrong-typed, or unknown inputs fail closed. Make PreCompact state
-   per validated session, atomic, bounded, and injection-safe. Generate and byte-test
-   all 48 versioned fixture files.
-6. Update Codex manifest/catalog, compatibility/root-binding metadata, pinned schemas,
+5. Split hook policy from wire output at the executable boundary while retaining the
+   one required physical manifest, `hooks/hooks.json`, for both clients. Its command
+   resolves the hook executable from `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}` only
+   inside the hook process; an empty root fails closed. The executable selects Codex
+   wire behavior only when `PLUGIN_ROOT` is a validated physical plugin root and
+   otherwise selects Claude only when `CLAUDE_PLUGIN_ROOT` validates. Claude retains
+   exit-2/stderr blocking; Codex uses exit 0 and the exact JSON envelopes in spec 08.
+   Both accept current `trigger`; malformed, missing, wrong-typed, unknown, ambiguous-
+   client, and mismatched-root inputs fail closed. Make PreCompact state per validated
+   session, atomic, bounded, and injection-safe. Generate and byte-test all 48
+   versioned fixture files. The Codex manifest binds exactly `./hooks/hooks.json`;
+   there is no second client-specific hook manifest.
+6. Add `loom-launch-role` as the sole client role launcher. It reads the exact role to
+   profile to client mapping from the versioned compatibility matrix and never accepts
+   a caller-supplied vendor selector. For every Claude launch it emits the exact native
+   tier and omits the Agent capability. For every Codex launch it executes a fresh
+   `codex exec --ephemeral --ignore-user-config --strict-config --disable multi_agent`
+   child with exact `--model`, exact `-c model_reasoning_effort=<value>`, read-only
+   sandbox, no web search, the canonical contract, and a closed bounded-output schema.
+   It captures normalized effective launch configuration and client run metadata and
+   rejects a missing, unavailable, renamed, inherited, or substituted model/effort,
+   an enabled delegation feature, or a descendant-launch attempt. Deterministic tests
+   inspect effective configuration for Economy, Standard, and Deep review, all five
+   roles, both clients, cold IDs, one-level permissions, and each negative condition;
+   dogfood still performs one real cold role launch per client.
+7. Update Codex manifest/catalog, compatibility/root-binding metadata, pinned schemas,
    and release-owned fixtures only as required by the implemented surfaces. Validate
-   exactly eight workflow skill names, five role mappings, two hook manifests, and
-   both root contracts while retaining version 0.2.0 and the full release matrix.
-7. Add a fail-closed macOS dogfood harness with `--prepare`, `--exercise`, and
-   `--uninstall` phases plus a unit-testable dry fixture mode. It creates fresh Claude,
-   Codex, and project homes; inventories before/after paths; installs and reinstalls
-   the exact committed plugin through each native marketplace flow; discovers all
-   mappings; explicitly invokes a read-only workflow inside and outside the project;
-   launches one real cold non-delegating role per client; runs hook fixtures and
-   installed-root helper probes; records honest Codex hook trust/activation; and
-   removes plugin/marketplace state without touching owner configuration.
-8. Write the sanitized evidence JSON with exact candidate SHA/tree, commands, exits,
-   versions, physical installed roots, fixture/output hashes, bounded role returns,
-   delegation probes, trust result, and filesystem inventories. A client usage limit,
-   missing trust path, or unavailable required model is `infrastructure-blocked`, not
-   PASS and not a merits round.
-9. Run three cold advisory finders (correctness, tests, security) on one sealed exact
+   exactly eight workflow skill names, five role mappings, the one shared hook manifest,
+   and both root contracts while retaining version 0.2.0 and the full release matrix.
+8. Add a fail-closed macOS dogfood harness with `--prepare`, `--exercise`, `--uninstall`,
+   and `--clean` phases plus a unit-testable dry fixture mode. The versioned macOS-arm64
+   fixture pins floor versions, native argv, environment redirects, allowed roots, and
+   expected cache layout. `--prepare` creates a unique `mktemp -d` run below the
+   canonical system temporary directory, rejects symlinks/owner-home overlap, writes a
+   random owner marker plus schema-valid `state.json`, and creates separate Claude,
+   Codex, project, system-home, and temporary roots. Every phase validates the marker,
+   physical containment, exact candidate, current status, pre-inventory, and previous
+   evidence hash before work, then atomically records post-inventory and next state.
+   Resume is permitted only for the same marker/schema/candidate/phase; interruption
+   leaves the last completed phase reusable. Product/plugin cleanup uses only the
+   pinned native uninstall and marketplace-remove commands. `--clean <absolute-run>`
+   is the only recursive cleanup and refuses a missing/wrong marker, symlink, path
+   outside the temporary prefix, owner-home overlap, incomplete inventory, residue,
+   or an unrecorded phase.
+9. Exercise each client from that harness with `HOME`, `CLAUDE_CONFIG_DIR`,
+   `CODEX_HOME`, and `TMPDIR` redirected to owned roots as applicable. Run the exact
+   floor-version marketplace add, install, second install/reinstall, list/discovery,
+   one explicit read-only workflow inside and outside the project, one real cold role,
+   hook/trust observation, and installed-root helper probes, followed by uninstall,
+   marketplace removal, and zero-discovery/residue checks. Canonical inventories use
+   sorted physical relative paths, types, modes, sizes, and file SHA-256 values. Tests
+   cover escape, missing/wrong ownership, owner-home access, partial/interrupted state,
+   retry, stale candidate, unexpected residue, failed native cleanup, and forbidden
+   recursive cleanup without ever touching the owner's real configuration.
+
+   The fixture expands only placeholders and pins these native state-changing
+   sequences at the recorded floors. Claude runs `claude plugin marketplace add
+   $REPO_ROOT --scope user`, `claude plugin install loom@loom --scope user`,
+   `claude plugin list --json`, `claude plugin uninstall loom@loom --scope user -y`,
+   the same install/list pair as the reinstall, then final uninstall and `claude plugin
+   marketplace remove loom`. Codex runs `codex plugin marketplace add $REPO_ROOT
+   --json`, `codex plugin add loom@loom --json`, `codex plugin list`, `codex plugin
+   remove loom@loom --json`, the same add/list pair as the reinstall, then final remove
+   and `codex plugin marketplace remove loom --json`. Each removal is followed by
+   native discovery and physical inventory checks before the next phase; an unexpected
+   prompt, selector, cache root, marketplace name, or floor-version drift fails closed.
+10. Write evidence conforming to `loom-dogfood-evidence/v1` as UTF-8 canonical compact
+   JSON (`jq -S -c` plus one LF) and hash those exact bytes. It binds candidate SHA/tree,
+   harness/fixture/schema hashes, commands and exits, versions, redacted physical roots,
+   fixture/output hashes, bounded role returns, delegation probes, trust result, and
+   pre/post inventories. Replace the run and repository prefixes with `$RUN_ROOT` and
+   `$REPO_ROOT`, retain no raw transcripts or credentials, reject secret-shaped fields,
+   and bound every captured string. States are `prepared`, `installed`, `exercised`,
+   `uninstalled`, `complete`, `infrastructure-blocked`, or `failed`; stable exits are
+   0 success, 2 usage, 3 unsafe target/state, 4 infrastructure block, 5 product failure,
+   and 6 residue. A usage limit, missing trust path, or unavailable required model is
+   `infrastructure-blocked`, not PASS and not a merits round.
+11. Run three cold advisory finders (correctness, tests, security) on one sealed exact
    package, assemble their results, then route the aggregate plus full gate/evidence to
    a distinct cold code evaluator. Only its PASS authorizes finalization.
-10. On PASS, archive the plan; synchronize README, CLAUDE, AGENTS, evaluation index,
+12. On PASS, archive the plan; synchronize README, CLAUDE, AGENTS, evaluation index,
     and living status to say private Apple-silicon dogfood-ready without claiming a
     public release or reducing Linux/Intel obligations. Publish only through the
     protected ADR-0023 intent/receipt/settlement sequence.
@@ -243,24 +303,38 @@ client transcripts, and the publication receipt remain untracked.
    and invocation from unrelated working directories.
 4. Hook Bats enumerate the exact fixture Cartesian product and byte-compare status,
    stdout, and stderr. Negative tests cover invalid JSON/types/trigger/reason/session,
-   concurrent sessions, interrupted writes, log injection/cap, and both client wire
-   envelopes.
-5. From fresh isolated homes, run native marketplace add, plugin install, second
+   concurrent sessions, interrupted writes, log injection/cap, ambiguous/mismatched
+   client roots, empty roots, and both client wire envelopes. Static validation proves
+   the Codex manifest references only exact `./hooks/hooks.json`.
+5. `loom-launch-role.bats` exercises all five roles and three profiles for both clients,
+   compares normalized effective launch configuration to the versioned matrix, and
+   rejects missing/unavailable/substituted model or effort, inheritance, non-cold IDs,
+   enabled delegation, descendant launch, unbounded output, and role/profile drift.
+6. Harness dry-fixture tests prove marker/schema/physical-root ownership, canonical
+   inventories and hashes, owner-home isolation, atomic phase transitions, safe retry,
+   redaction and secret rejection, stable exits/states, residue detection, native-only
+   uninstall, and fail-closed cleanup for escape, symlink, partial, stale, or wrong-
+   ownership inputs.
+7. From fresh isolated homes, run the fixture-pinned native marketplace add, plugin
+   install, second
    install/reinstall, list/discovery, one explicit read-only workflow inside/outside,
    one real cold role launch, hook/trust observation, helper-root probe, uninstall,
    marketplace removal, and post-inventory for each client. Recompute evidence hashes
    from the exact installed cached roots; source-tree success is insufficient.
-6. The evidence must show Darwin `arm64`, exact client floors, identical intended
+8. The evidence must show Darwin `arm64`, exact client floors, identical intended
    project root inside/outside, no writes beyond isolated roots/documented caches,
    bounded role returns, child delegation denied, exact helper containment, and zero
    remaining Loom discovery after uninstall. Any missing required proof blocks PASS.
-7. Immediately before intent, freshly verify protected transition ancestry/rules/tip,
+9. Immediately before intent, freshly verify protected transition ancestry/rules/tip,
    active phase, this slice allowed, no unsettled conflicting intent, required
    components available, prior settled results contained in fresh remote `main`, exact
    base, immutable ADR-0024 authority, candidate/evidence hashes, and held claim.
 
 ## Notes
 
+- 2026-07-23: Cold plan evaluation round 0 failed on the shared hook path, enforceable
+  Codex launch configuration, and destructive-harness evidence controls. This revision
+  closes those three findings and returns the same merits round for reevaluation.
 - 2026-07-23: Isolated baseline installs succeeded for both clients. Codex installed
   to `<CODEX_HOME>/plugins/cache/loom/loom/0.2.0` but exposed only `loom-playbook`.
 - 2026-07-23: The OpenAI manual helper could not run because the host Homebrew Node

@@ -27,6 +27,8 @@ PASS/FAIL + severity rules are in
   — immutable authority for the private Apple-silicon checkpoint.
 - [ci-baseline](ci-baseline-eval.md) and
   [review findings](ci-baseline-review-findings.md) — landed M0 evidence.
+- [macOS dual-client dogfood plan](macos-dual-client-dogfood-plan-eval.md) — current
+  code-bearing slice plan evaluation history.
 
 All other files in this directory remain durable historical verdicts and are not
 rewritten when a later decision supersedes their subject.

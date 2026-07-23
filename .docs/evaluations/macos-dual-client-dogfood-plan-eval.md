@@ -1,0 +1,29 @@
+# Evaluation: Apple-silicon Claude Code + Codex dogfood plan
+
+Verdict: FAIL
+Round: 0
+Reviewed candidate: `9b35f929be2efc4f0b644a6185f32c2b3cfeff78`
+Reviewed tree: `563a82d12b0dbd4b1980f9deefddba274187339f`
+Sealed package: `/private/tmp/loom-macos-dual-client-plan-9b35f92-r0`
+Manifest SHA-256: `d4fd7375b37a1d9aa0f6a803f082068716f1a6cc0497179597bbf625c8b7fc18`
+Input inventory SHA-256: `41e293aabd48a636610fd54679fcfb443a90e2867b188c089e717606e6bec128`
+Verdict SHA-256: `52a61a4eede40cce047fdff9fb61c2cef6860e1d1961b2c9829dcb4aec423ca4`
+
+## Findings
+
+- [BLOCKER] The proposed `hooks/codex-hooks.json` conflicts with the approved exact
+  Codex binding `./hooks/hooks.json`. The plan must retain one physical manifest and
+  define fail-closed client wire dispatch without weakening Claude behavior.
+- [BLOCKER] The proposed role skills state profiles but do not define a launcher that
+  reads the versioned mapping, sets and verifies both exact Codex model keys for every
+  cold launch, enforces one-level non-delegation, or tests all profiles and failures.
+- [MAJOR] The destructive dogfood harness lacks a versioned state/evidence schema,
+  exact native floor commands and environment redirects, ownership and containment
+  controls, canonical inventories/redaction, resumable phase rules, stable failure
+  states, and negative cleanup tests.
+
+## Required changes
+
+Revise the plan to close all three findings, seal the exact revised package, and route
+it back to a fresh cold plan evaluator. A resolving PASS remains round 0; the process
+does not run an arbitrary number of review rounds.
