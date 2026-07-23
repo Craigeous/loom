@@ -241,22 +241,31 @@ client transcripts, guarded dogfood cleanup receipts below
    random owner marker plus schema-valid `state.json`, and creates separate Claude,
    Codex, project, system-home, and temporary roots. Every phase validates the marker,
    physical containment, exact candidate, current status, pre-inventory, and previous
-   evidence hash before work. Each native mutation is a numbered substep with states
-   `idle`, `intended`, `launched`, `released`, and `applied`. Before launch, one atomic
-   write-ahead record binds
-   the argv hash, client, semantic pre/postconditions, allowed physical mutation roots,
-   random run/substep token, handshake deadline, and complete pre-inventory hash.
+   evidence hash before work. Each native mutation is one hash-chained immutable atomic
+   journal below its owned control directory, with records `intent`, `supervisor-hello`,
+   `supervisor-launch`, `supervisor-release`, `native-hello`, `native-launch`,
+   `native-release`, `terminal`, and `applied`. A record is the state transition and the
+   release capability; there is no second release file or mutable-state/file ordering
+   window. `intent` binds argv hash, client, semantic pre/postconditions, allowed
+   physical mutation roots, random run/substep token, handshake deadline, and complete
+   pre-inventory hash.
 
-   The harness then spawns its own marker-bound mutation-wrapper mode, passing only the
-   owned control directory and token. The wrapper's first action is an exclusive atomic
-   `hello` containing that token, PID, OS process birth/start discriminator, and wrapper
-   executable hash; it then waits and cannot exec the native client. The parent verifies
-   `hello` against the physical wrapper, process table, token, and still-current intent,
-   atomically persists `launched` with the non-reusable identity, atomically persists
-   `released`, and only then creates a token-bound release record. The wrapper re-reads
-   and validates `released`, its exact identity, and the release record before exec.
-   It writes an atomic terminal result with native exit and bounded output hashes. Thus
-   no native mutation can begin before its discoverable identity is durable.
+   The harness spawns its marker-bound supervisor mode in a new process group. Before
+   doing anything else, the supervisor atomically creates `supervisor-hello` with the
+   token, PID, process-group ID, OS birth/start discriminator, and physical executable
+   hash, then blocks. The parent verifies that identity and atomically creates
+   `supervisor-launch` and `supervisor-release`. Only that single release record permits
+   the supervisor to continue. It forks a native worker in the same group; the worker
+   atomically creates `native-hello` with its own PID/birth identity and blocks. The
+   supervisor verifies it and atomically writes `native-launch` and `native-release`.
+   Only that native-release record permits the worker to `exec` the pinned client,
+   preserving the already durable worker PID/birth identity across process replacement.
+   The supervisor retains its own durable identity, waits for the worker, and writes the
+   atomic `terminal` record with native exit and bounded output hashes. The token is
+   present in every record, process argv/environment, and descendant scan. Native
+   mutation is therefore impossible before both supervisor and mutating-worker
+   identities are durable, while a separate durable supervisor remains able to record
+   termination.
 
    After native exit, the harness
    inventories first, validates the semantic postcondition and allowed-root-only diff,
@@ -264,32 +273,38 @@ client transcripts, guarded dogfood cleanup receipts below
    and `applied` before advancing. It never treats phase state alone as proof.
 
    Resume is permitted only for the same marker/schema/candidate/phase/substep and
-   reconciles mechanically. An `intended` substep never immediately reruns: until its
-   recorded handshake deadline, resume scans the owned hello/control record and exact
-   wrapper-path plus token process identity and exits 3 while either may still appear.
-   A wrapper without durable release times out, atomically records
-   `aborted-before-release`, and exits without mutation. Only after the deadline, a
-   valid terminal abort, positive proof that no token-bound wrapper/client identity is
-   live, absence of release, and an exact pre-inventory match may resume reset to
-   `intended` and spawn once. `launched` resumes by validating the blocked identity and
-   committing/reissuing `released`; `released` never relaunches and waits for the exact
-   process or terminal result. A stopped process plus satisfied postcondition and a
-   diff wholly inside the
+   reconciles the longest valid journal prefix mechanically. Before either release,
+   the corresponding blocked process times out and writes a terminal pre-release abort;
+   resume may also append the missing release record exactly once after validating the
+   recorded live identity. Because release is one atomic journal record, interruption
+   before it leaves the process blocked and interruption after it is unambiguously
+   released. If a pre-release supervisor/worker dies, resume requires a valid abort or
+   the expired deadline, positive token/process-group death proof, no later journal
+   record, and exact pre-inventory before appending `aborted-before-native` and starting
+   a new tokenized attempt. It never reuses or overwrites an attempt.
+
+   After `native-release`, resume never relaunches: it validates and waits for the
+   durable worker or terminal record. Supervisor death cannot hide an orphan because
+   the worker PID/birth and group are already journaled; worker/supervisor death without
+   terminal is reconciled only after scanning exact identities, the process group, and
+   the token across the process table. A stopped process plus satisfied postcondition
+   and a diff wholly inside the
    declared roots records a `recovered-after-apply` result from the current inventory
-   without rerunning; a dead released process without a valid terminal result, any
+   without rerunning; a dead released process with ambiguous effects, any
    other inventory, or any live/reused/unverifiable process identity atomically
    enters `quarantined` and exits 3. An interruption before intent leaves `idle`; after
    `applied` it advances normally. Signal tests require 130 for INT and 143 for TERM;
    the next invocation returns 0 only after one of the two valid reconciliations, while
-   partial/ambiguous mutation returns 3 with the pre/current hashes, handshake records,
-   process proof, and reason recorded.
+   partial/ambiguous mutation returns 3 with the pre/current hashes, full journal,
+   supervisor/worker/group/token process proof, and reason recorded.
    The state schema admits `recovery-required` and `quarantined` in addition to normal
    phase states, so no retry depends on an inventory a command may already have changed.
 
    Product/plugin cleanup uses only the pinned native uninstall and marketplace-remove
    commands. `--clean <absolute-run>` is the only recursive cleanup. It refuses a
    missing/wrong marker, symlink, path outside the temporary prefix, owner-home overlap,
-   live or unverifiable token-bound wrapper/client process, unexpired handshake, or
+   live or unverifiable token-bound supervisor/worker/descendant process or group,
+   unexpired handshake, or
    incomplete inventory. A quarantined run is cleanable only
    after a fresh complete inventory proves every path is marker-owned and physically
    contained; before deletion, the harness atomically writes a canonical quarantine
@@ -299,11 +314,12 @@ client transcripts, guarded dogfood cleanup receipts below
    intent, after intent, during mutation, after native exit, after inventory, and after
    `applied` for every marketplace/install/remove operation and assert those exact
    state, exit, reconciliation, evidence, and cleanup outcomes. The injected points
-   include before spawn, after spawn before `hello`, after `hello` before durable
-   identity, after `launched` before `released`, after `released` before release-record
-   creation, and after release before native exec; each test proves the wrapper cannot
-   mutate early, resume never duplicates a live/unverifiable substep, and cleanup waits
-   for positive process-death proof.
+   surround every journal record and include supervisor death, worker death before
+   exec, supervisor death while the native worker continues, native orphaning, and
+   descendants that remain in or escape the process group while retaining the token.
+   Each test proves no early mutation, atomic release recovery, stable PID across worker
+   exec, supervisor terminal recording, no duplicate live/unverifiable substep, and
+   cleanup only after positive identity/group/token death proof.
 9. Exercise each client from that harness with `HOME`, `CLAUDE_CONFIG_DIR`,
    `CODEX_HOME`, and `TMPDIR` redirected to owned roots as applicable. Run the exact
    floor-version marketplace add, install, second install/reinstall, list/discovery,

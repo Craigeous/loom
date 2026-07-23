@@ -64,3 +64,22 @@ so resume can duplicate it and cleanup cannot positively exclude it. Require a t
 bound wrapper that cannot mutate until durable `launched` identity and `released`
 state exist, with exact reconciliation and interruption tests around every handshake
 boundary.
+
+---
+
+## Reevaluation of revision `077aebd`
+
+Verdict: FAIL
+Round: 0
+Reviewed commit: `077aebd5802bb209cd64814bbd2cff5872c21219`
+Reviewed tree: `5ac1f0004c7895d052375edd917fa88b3749e019`
+Manifest SHA-256: `47c7a0b721c6ee22376effad8826c1778580f39ca63d113c1babfd04b150600e`
+Input inventory SHA-256: `83d9ef0e3682b7cf9ae48b8e3479715200b40a01199cafa7f9044adf51e0d47a`
+Verdict SHA-256: `68464e134c03dc11e8815b5910af62b8ba6e1bb89f271cb0f5910363e27057e7`
+
+One MAJOR remains in release-to-native topology. Process replacement prevents the
+same wrapper from recording terminal output, while forking an unrecorded native PID
+can orphan a mutator. The separate `released` state and release record also leave a
+recovery gap. Specify a durable supervisor plus a gated worker whose recorded PID is
+preserved across exec, one atomic release record per gate, process-group/token orphan
+proof, and exact recovery for pre-release aborts, supervisor death, and native orphans.
