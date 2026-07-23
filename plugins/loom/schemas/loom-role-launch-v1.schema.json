@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/craigeous/loom/schemas/loom-role-launch-v1.schema.json",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "client", "role", "profile", "coldId", "cold", "delegation", "permissions", "claude"],
+      "properties": {
+        "schema": { "const": "loom-role-launch/v1" },
+        "client": { "const": "claude" },
+        "role": { "enum": ["researcher", "planner", "plan-evaluator", "developer", "code-evaluator"] },
+        "profile": { "enum": ["Economy", "Standard", "Deep review"] },
+        "coldId": { "type": "string", "minLength": 1 },
+        "cold": { "const": true },
+        "delegation": { "const": false },
+        "permissions": { "const": "one-level" },
+        "claude": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["selector", "agentCapability"],
+          "properties": {
+            "selector": { "enum": ["haiku", "sonnet", "opus"] },
+            "agentCapability": { "const": false }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "client", "role", "profile", "coldId", "cold", "delegation", "permissions", "codex"],
+      "properties": {
+        "schema": { "const": "loom-role-launch/v1" },
+        "client": { "const": "codex" },
+        "role": { "enum": ["researcher", "planner", "plan-evaluator", "developer", "code-evaluator"] },
+        "profile": { "enum": ["Economy", "Standard", "Deep review"] },
+        "coldId": { "type": "string", "minLength": 1 },
+        "cold": { "const": true },
+        "delegation": { "const": false },
+        "permissions": { "const": "one-level" },
+        "codex": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model", "effort", "sandbox", "webSearch", "argv"],
+          "properties": {
+            "model": { "enum": ["gpt-5.6-terra", "gpt-5.6"] },
+            "effort": { "enum": ["low", "medium", "high"] },
+            "sandbox": { "const": "read-only" },
+            "webSearch": { "const": false },
+            "argv": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+# loom-launch-role — the sole client role launcher (spec 10 -> Versioned
+# compatibility and capability mapping; ADR 0018/0019; macos-dual-client-dogfood
+# plan Step 6).
+#
+# Usage:
+#   loom-launch-role claude|codex researcher|planner|plan-evaluator|developer|code-evaluator
+#
+# The caller supplies only a client and a role. Every model/tier/effort value is
+# derived from the tracked, versioned compatibility matrix
+# (adapters/compatibility/v0.2.0.json) resolved relative to this script's own
+# physical location -- never from a caller-supplied vendor selector, a bare
+# PATH lookup, CLAUDE_PLUGIN_ROOT, PLUGIN_ROOT, or CODEX_HOME.
+#
+# Claude launches never spawn a process: this prints one line of normalized
+# effective launch configuration (schema loom-role-launch/v1) to stdout after
+# cross-checking the installed native tier + tool allowlist in
+# agents/<role>.md against the matrix (the exact native tier; the Agent
+# delegation capability is proven omitted, never granted at runtime).
+#
+# Codex launches print that same normalized configuration line and then
+# execute a fresh, ephemeral `codex exec` child (read-only sandbox, no web
+# search, delegation disabled, a closed bounded-output schema) via
+# `exec env LOOM_LAUNCH_ROLE_ACTIVE=1 "$CODEX_BIN" ...`. Tests MUST NOT spawn a
+# live codex process: point LOOM_LAUNCH_ROLE_CODEX_BIN at a stub executable
+# that records its argv/environment and this script will invoke that stub
+# instead, exercising the real argument-construction path.
+#
+# Exact `codex exec` sandbox/web-search flag spelling is this slice's best
+# engineering judgment; the one real cold launch per client in the later
+# dogfood pass (ADR 0024) is authoritative and may require reconciliation.
+#
+# FAIL DIRECTION: fail-closed. Exit codes:
+#   0 — success
+#   1 — usage error (bad argument shape)
+#   2 — fail-closed: a resolution/identity/policy check failed
+set -u
+
+ROLES=(researcher planner plan-evaluator developer code-evaluator)
+CLIENTS=(claude codex)
+VENDOR_OVERRIDE_VARS=(CODEX_MODEL MODEL_REASONING_EFFORT OPENAI_MODEL ANTHROPIC_MODEL CLAUDE_MODEL LOOM_LAUNCH_ROLE_MODEL LOOM_LAUNCH_ROLE_EFFORT LOOM_LAUNCH_ROLE_SELECTOR)
+
+_usage() {
+    printf 'usage: loom-launch-role claude|codex researcher|planner|plan-evaluator|developer|code-evaluator\n' >&2
+    exit 1
+}
+
+_fail() {
+    printf 'loom-launch-role: %s\n' "$1" >&2
+    exit 2
+}
+
+_is_member() {
+    local needle="$1" straw
+    shift
+    for straw in "$@"; do
+        [ "$straw" = "$needle" ] && return 0
+    done
+    return 1
+}
+
+# _canon_dir <path> — canonicalize an existing directory to its absolute
+# physical path (symlinks in the directory chain resolved by cd -P).
+_canon_dir() {
+    CDPATH='' cd -- "$1" 2>/dev/null && pwd -P
+}
+
+# _frontmatter_field <file> <key> — print the first top-level "key: value"
+# frontmatter line's trimmed value; fails if the file has no frontmatter or
+# the key is absent before the closing "---".
+_frontmatter_field() {
+    local file="$1" key="$2" in_fm=0 line prefix
+    prefix="$key: "
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$in_fm" -eq 0 ]; then
+            if [ "$line" = "---" ]; then
+                in_fm=1
+                continue
+            fi
+            return 1
+        fi
+        [ "$line" = "---" ] && return 1
+        case "$line" in
+        "$prefix"*)
+            printf '%s\n' "${line#"$prefix"}"
+            return 0
+            ;;
+        esac
+    done <"$file"
+    return 1
+}
+
+# _csv_contains <csv> <item> — true if item is a comma-separated member,
+# trimming a single leading space around each element (matches "A, B, C").
+_csv_contains() {
+    local csv="$1" item="$2" IFS=',' token
+    for token in $csv; do
+        token="${token# }"
+        [ "$token" = "$item" ] && return 0
+    done
+    return 1
+}
+
+# _cold_id — a fresh, unique launch identifier; never caller-supplied,
+# never reused across invocations.
+_cold_id() {
+    local tmp base
+    tmp=$(mktemp -u "${TMPDIR:-/tmp}/loom-launch-role.XXXXXXXXXXXXXXXX" 2>/dev/null) || return 1
+    base=$(basename -- "$tmp")
+    case "$base" in
+    loom-launch-role.?*) printf '%s\n' "${base#loom-launch-role.}" ;;
+    *) return 1 ;;
+    esac
+}
+
+# _role_key <role> — the compatibility matrix's human "consumers" spelling.
+_role_key() {
+    case "$1" in
+    plan-evaluator) printf 'plan evaluator' ;;
+    code-evaluator) printf 'code evaluator' ;;
+    *) printf '%s' "$1" ;;
+    esac
+}
+
+# _json_escape <value> — minimal JSON string escaping for our own
+# already-enumerated/validated values (no control characters expected).
+_json_escape() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '%s' "$value"
+}
+
+# _json_argv_array <arg...> — render a bash argv array as a JSON string array.
+_json_argv_array() {
+    local out="[" first=1 arg
+    for arg in "$@"; do
+        [ "$first" -eq 1 ] || out="$out,"
+        first=0
+        out="$out\"$(_json_escape "$arg")\""
+    done
+    printf '%s]' "$out"
+}
+
+_guard_descendant() {
+    [ -z "${LOOM_LAUNCH_ROLE_ACTIVE:-}" ] || _fail "descendant launch attempt rejected: role delegation is forbidden"
+}
+
+_guard_vendor_override() {
+    local var value
+    for var in "${VENDOR_OVERRIDE_VARS[@]}"; do
+        value="${!var:-}"
+        [ -z "$value" ] || _fail "environment attempts to override vendor model/effort selection: $var is set"
+    done
+}
+
+_guard_delegation_env() {
+    case "${LOOM_LAUNCH_ROLE_ALLOW_DELEGATION:-}" in
+    "" | 0 | false | no) ;;
+    *) _fail "delegation feature enabled: LOOM_LAUNCH_ROLE_ALLOW_DELEGATION is set" ;;
+    esac
+}
+
+_matrix_field() {
+    # _matrix_field <matrix-json> <profile> <jq-path-after-.codex-or-.claude>
+    printf '%s' "$1" | jq -r --arg p "$2" "[.profiles[] | select(.profile==\$p)] | .[0]$3 // empty"
+}
+
+_launch_claude() {
+    local root="$1" role="$2" profile="$3" selector="$4"
+    local agent_path model tools cold_id
+    agent_path="$root/agents/$role.md"
+    [ -f "$agent_path" ] || _fail "agent adapter is missing: $role"
+    model=$(_frontmatter_field "$agent_path" model) || _fail "agent adapter has no model field: $role"
+    tools=$(_frontmatter_field "$agent_path" tools) || _fail "agent adapter has no tools field: $role"
+    [ "$model" = "$selector" ] || _fail "agent adapter model does not match the compatibility matrix tier: $role"
+    _csv_contains "$tools" "Agent" && _fail "agent adapter grants the forbidden Agent capability: $role"
+    cold_id=$(_cold_id) || _fail "cannot generate a cold launch id"
+    printf '{"schema":"loom-role-launch/v1","client":"claude","role":"%s","profile":"%s","coldId":"%s","cold":true,"delegation":false,"permissions":"one-level","claude":{"selector":"%s","agentCapability":false}}\n' \
+        "$role" "$profile" "$cold_id" "$selector"
+}
+
+_launch_codex() {
+    local root="$1" role="$2" profile="$3" model="$4" effort="$5"
+    local skill_path schema_path cold_id argv codex_bin
+    skill_path="$root/skills/loom-$role/SKILL.md"
+    [ -f "$skill_path" ] || _fail "codex role skill is missing: $role"
+    schema_path="$root/schemas/loom-role-launch-v1.schema.json"
+    [ -f "$schema_path" ] || _fail "closed bounded-output schema is missing"
+    cold_id=$(_cold_id) || _fail "cannot generate a cold launch id"
+    argv=(
+        exec --ephemeral --ignore-user-config --strict-config --disable multi_agent
+        --sandbox read-only --model "$model" -c "model_reasoning_effort=$effort"
+        -c "tools.web_search=false" --output-schema "$schema_path" "\$loom-$role"
+    )
+    printf '{"schema":"loom-role-launch/v1","client":"codex","role":"%s","profile":"%s","coldId":"%s","cold":true,"delegation":false,"permissions":"one-level","codex":{"model":"%s","effort":"%s","sandbox":"read-only","webSearch":false,"argv":%s}}\n' \
+        "$role" "$profile" "$cold_id" "$model" "$effort" "$(_json_argv_array "${argv[@]}")"
+    codex_bin="${LOOM_LAUNCH_ROLE_CODEX_BIN:-codex}"
+    exec env LOOM_LAUNCH_ROLE_ACTIVE=1 "$codex_bin" "${argv[@]}"
+}
+
+main() {
+    [ "$#" -eq 2 ] || _usage
+    local client="$1" role="$2"
+    _is_member "$client" "${CLIENTS[@]}" || _usage
+    _is_member "$role" "${ROLES[@]}" || _usage
+
+    case "$0" in
+    /*) ;;
+    *) _fail "must be invoked by absolute path" ;;
+    esac
+
+    _guard_descendant
+    _guard_vendor_override
+    _guard_delegation_env
+
+    command -v jq >/dev/null 2>&1 || _fail "jq is required"
+
+    local script_dir root matrix_path matrix_json schema_ok matrix_version role_key profile
+    script_dir=$(_canon_dir "$(dirname -- "$0")") || _fail "cannot canonicalize script directory"
+    root=$(_canon_dir "$script_dir/..") || _fail "cannot canonicalize plugin root"
+    matrix_path="$root/adapters/compatibility/v0.2.0.json"
+    [ -f "$matrix_path" ] || _fail "compatibility matrix is missing"
+    matrix_json=$(cat -- "$matrix_path" 2>/dev/null) || _fail "cannot read compatibility matrix"
+    schema_ok=$(printf '%s' "$matrix_json" | jq -r '.schema // empty' 2>/dev/null) || _fail "compatibility matrix is not valid JSON"
+    [ "$schema_ok" = "loom-compatibility-matrix/v1" ] || _fail "compatibility matrix schema mismatch"
+    matrix_version=$(printf '%s' "$matrix_json" | jq -r '.version // empty')
+    [ "$matrix_version" = "0.2.0" ] || _fail "compatibility matrix version mismatch"
+
+    role_key=$(_role_key "$role")
+    profile=$(printf '%s' "$matrix_json" | jq -r --arg r "$role_key" '[.profiles[] | select(.consumers[]? == $r)] | .[0].profile // empty')
+    [ -n "$profile" ] || _fail "no profile mapped for role: $role"
+
+    case "$client" in
+    claude)
+        local selector
+        selector=$(_matrix_field "$matrix_json" "$profile" ".claude.selector")
+        [ -n "$selector" ] || _fail "no Claude selector mapped for profile: $profile"
+        _launch_claude "$root" "$role" "$profile" "$selector"
+        ;;
+    codex)
+        local model effort
+        model=$(_matrix_field "$matrix_json" "$profile" ".codex.model")
+        effort=$(_matrix_field "$matrix_json" "$profile" ".codex.effort")
+        [ -n "$model" ] || _fail "no Codex model mapped for profile: $profile"
+        [ -n "$effort" ] || _fail "no Codex effort mapped for profile: $profile"
+        _launch_codex "$root" "$role" "$profile" "$model" "$effort"
+        ;;
+    esac
+}
+
+main "$@"
