@@ -45,3 +45,22 @@ mutation may finish before its atomic phase record, making both the stated inven
 precondition and cleanup reject the interrupted run. Define write-ahead mutation
 substeps, deterministic before/after/partial reconciliation, and a safe validated
 recovery or quarantine cleanup transition with exact states, exits, and evidence.
+
+---
+
+## Reevaluation of revision `96cbc2c`
+
+Verdict: FAIL
+Round: 0
+Reviewed commit: `96cbc2ce5045ed64fcfefb464c2d38c59e27bd94`
+Reviewed tree: `c84a0643bd0564e0a427155fa43d623712d44652`
+Manifest SHA-256: `fc010cf393f77d17e3ced29538d4d34224616282d6245962d59f0396c756e972`
+Input inventory SHA-256: `fecac3bbd516b2e69900037cce02adec5466f744df3692dffe9c8404ee0aca76`
+Verdict SHA-256: `ac4cdadbb5b4ba2acfd023e9e6a95840d12ce0fdf5d07f9f28e5e1bbafe6a82c`
+
+The remaining recovery design still has one MAJOR launch-to-identity durability
+window: a spawned native child may be live before its PID/birth identity is recorded,
+so resume can duplicate it and cleanup cannot positively exclude it. Require a token-
+bound wrapper that cannot mutate until durable `launched` identity and `released`
+state exist, with exact reconciliation and interruption tests around every handshake
+boundary.

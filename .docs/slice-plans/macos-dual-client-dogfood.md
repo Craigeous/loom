@@ -242,29 +242,55 @@ client transcripts, guarded dogfood cleanup receipts below
    Codex, project, system-home, and temporary roots. Every phase validates the marker,
    physical containment, exact candidate, current status, pre-inventory, and previous
    evidence hash before work. Each native mutation is a numbered substep with states
-   `idle`, `intended`, and `applied`. Before launch, one atomic write-ahead record binds
+   `idle`, `intended`, `launched`, `released`, and `applied`. Before launch, one atomic
+   write-ahead record binds
    the argv hash, client, semantic pre/postconditions, allowed physical mutation roots,
-   process identity slot, and complete pre-inventory hash. After exit, the harness
+   random run/substep token, handshake deadline, and complete pre-inventory hash.
+
+   The harness then spawns its own marker-bound mutation-wrapper mode, passing only the
+   owned control directory and token. The wrapper's first action is an exclusive atomic
+   `hello` containing that token, PID, OS process birth/start discriminator, and wrapper
+   executable hash; it then waits and cannot exec the native client. The parent verifies
+   `hello` against the physical wrapper, process table, token, and still-current intent,
+   atomically persists `launched` with the non-reusable identity, atomically persists
+   `released`, and only then creates a token-bound release record. The wrapper re-reads
+   and validates `released`, its exact identity, and the release record before exec.
+   It writes an atomic terminal result with native exit and bounded output hashes. Thus
+   no native mutation can begin before its discoverable identity is durable.
+
+   After native exit, the harness
    inventories first, validates the semantic postcondition and allowed-root-only diff,
    then atomically records command status, output hash, post-inventory/evidence hashes,
    and `applied` before advancing. It never treats phase state alone as proof.
 
    Resume is permitted only for the same marker/schema/candidate/phase/substep and
-   reconciles `intended` mechanically: an exact pre-inventory match reruns the pinned
-   command; a stopped process plus satisfied postcondition and a diff wholly inside the
+   reconciles mechanically. An `intended` substep never immediately reruns: until its
+   recorded handshake deadline, resume scans the owned hello/control record and exact
+   wrapper-path plus token process identity and exits 3 while either may still appear.
+   A wrapper without durable release times out, atomically records
+   `aborted-before-release`, and exits without mutation. Only after the deadline, a
+   valid terminal abort, positive proof that no token-bound wrapper/client identity is
+   live, absence of release, and an exact pre-inventory match may resume reset to
+   `intended` and spawn once. `launched` resumes by validating the blocked identity and
+   committing/reissuing `released`; `released` never relaunches and waits for the exact
+   process or terminal result. A stopped process plus satisfied postcondition and a
+   diff wholly inside the
    declared roots records a `recovered-after-apply` result from the current inventory
-   without rerunning; any other inventory or live/reused process identity atomically
+   without rerunning; a dead released process without a valid terminal result, any
+   other inventory, or any live/reused/unverifiable process identity atomically
    enters `quarantined` and exits 3. An interruption before intent leaves `idle`; after
    `applied` it advances normally. Signal tests require 130 for INT and 143 for TERM;
    the next invocation returns 0 only after one of the two valid reconciliations, while
-   partial/ambiguous mutation returns 3 with the pre/current hashes and reason recorded.
+   partial/ambiguous mutation returns 3 with the pre/current hashes, handshake records,
+   process proof, and reason recorded.
    The state schema admits `recovery-required` and `quarantined` in addition to normal
    phase states, so no retry depends on an inventory a command may already have changed.
 
    Product/plugin cleanup uses only the pinned native uninstall and marketplace-remove
    commands. `--clean <absolute-run>` is the only recursive cleanup. It refuses a
    missing/wrong marker, symlink, path outside the temporary prefix, owner-home overlap,
-   live client process, or incomplete inventory. A quarantined run is cleanable only
+   live or unverifiable token-bound wrapper/client process, unexpired handshake, or
+   incomplete inventory. A quarantined run is cleanable only
    after a fresh complete inventory proves every path is marker-owned and physically
    contained; before deletion, the harness atomically writes a canonical quarantine
    receipt with final inventory/evidence hashes to the documented untracked
@@ -272,7 +298,12 @@ client transcripts, guarded dogfood cleanup receipts below
    completed uninstall/residue check and receipt. Tests inject interruption before
    intent, after intent, during mutation, after native exit, after inventory, and after
    `applied` for every marketplace/install/remove operation and assert those exact
-   state, exit, reconciliation, evidence, and cleanup outcomes.
+   state, exit, reconciliation, evidence, and cleanup outcomes. The injected points
+   include before spawn, after spawn before `hello`, after `hello` before durable
+   identity, after `launched` before `released`, after `released` before release-record
+   creation, and after release before native exec; each test proves the wrapper cannot
+   mutate early, resume never duplicates a live/unverifiable substep, and cleanup waits
+   for positive process-death proof.
 9. Exercise each client from that harness with `HOME`, `CLAUDE_CONFIG_DIR`,
    `CODEX_HOME`, and `TMPDIR` redirected to owned roots as applicable. Run the exact
    floor-version marketplace add, install, second install/reinstall, list/discovery,
@@ -364,7 +395,8 @@ client transcripts, guarded dogfood cleanup receipts below
   Codex launch configuration, and destructive-harness evidence controls. This revision
   resolved the hook and launch findings. Reevaluation retained one harness-recovery
   MAJOR; the current revision adds write-ahead substeps, deterministic reconciliation,
-  quarantine, and narrowly validated cleanup and returns the same merits round.
+  quarantine, a token-bound pre-exec process-identity handshake, and narrowly validated
+  cleanup and returns the same merits round.
 - 2026-07-23: Isolated baseline installs succeeded for both clients. Codex installed
   to `<CODEX_HOME>/plugins/cache/loom/loom/0.2.0` but exposed only `loom-playbook`.
 - 2026-07-23: The OpenAI manual helper could not run because the host Homebrew Node
