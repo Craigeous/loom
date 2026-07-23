@@ -181,7 +181,8 @@ The hook-wire fixture set is exactly the Cartesian product of clients `claude` a
 
 All specs, ADRs, M1+ product work, CI/release files, existing coordination behavior,
 and any path not listed above are forbidden. Generated caches, disposable homes, raw
-client transcripts, and the publication receipt remain untracked.
+client transcripts, guarded dogfood cleanup receipts below
+`.git/loom/dogfood/receipts/`, and the publication receipt remain untracked.
 
 ## Steps
 
@@ -240,13 +241,38 @@ client transcripts, and the publication receipt remain untracked.
    random owner marker plus schema-valid `state.json`, and creates separate Claude,
    Codex, project, system-home, and temporary roots. Every phase validates the marker,
    physical containment, exact candidate, current status, pre-inventory, and previous
-   evidence hash before work, then atomically records post-inventory and next state.
-   Resume is permitted only for the same marker/schema/candidate/phase; interruption
-   leaves the last completed phase reusable. Product/plugin cleanup uses only the
-   pinned native uninstall and marketplace-remove commands. `--clean <absolute-run>`
-   is the only recursive cleanup and refuses a missing/wrong marker, symlink, path
-   outside the temporary prefix, owner-home overlap, incomplete inventory, residue,
-   or an unrecorded phase.
+   evidence hash before work. Each native mutation is a numbered substep with states
+   `idle`, `intended`, and `applied`. Before launch, one atomic write-ahead record binds
+   the argv hash, client, semantic pre/postconditions, allowed physical mutation roots,
+   process identity slot, and complete pre-inventory hash. After exit, the harness
+   inventories first, validates the semantic postcondition and allowed-root-only diff,
+   then atomically records command status, output hash, post-inventory/evidence hashes,
+   and `applied` before advancing. It never treats phase state alone as proof.
+
+   Resume is permitted only for the same marker/schema/candidate/phase/substep and
+   reconciles `intended` mechanically: an exact pre-inventory match reruns the pinned
+   command; a stopped process plus satisfied postcondition and a diff wholly inside the
+   declared roots records a `recovered-after-apply` result from the current inventory
+   without rerunning; any other inventory or live/reused process identity atomically
+   enters `quarantined` and exits 3. An interruption before intent leaves `idle`; after
+   `applied` it advances normally. Signal tests require 130 for INT and 143 for TERM;
+   the next invocation returns 0 only after one of the two valid reconciliations, while
+   partial/ambiguous mutation returns 3 with the pre/current hashes and reason recorded.
+   The state schema admits `recovery-required` and `quarantined` in addition to normal
+   phase states, so no retry depends on an inventory a command may already have changed.
+
+   Product/plugin cleanup uses only the pinned native uninstall and marketplace-remove
+   commands. `--clean <absolute-run>` is the only recursive cleanup. It refuses a
+   missing/wrong marker, symlink, path outside the temporary prefix, owner-home overlap,
+   live client process, or incomplete inventory. A quarantined run is cleanable only
+   after a fresh complete inventory proves every path is marker-owned and physically
+   contained; before deletion, the harness atomically writes a canonical quarantine
+   receipt with final inventory/evidence hashes to the documented untracked
+   `.git/loom/dogfood/receipts/<run-id>.json`. Normal cleanup likewise requires a
+   completed uninstall/residue check and receipt. Tests inject interruption before
+   intent, after intent, during mutation, after native exit, after inventory, and after
+   `applied` for every marketplace/install/remove operation and assert those exact
+   state, exit, reconciliation, evidence, and cleanup outcomes.
 9. Exercise each client from that harness with `HOME`, `CLAUDE_CONFIG_DIR`,
    `CODEX_HOME`, and `TMPDIR` redirected to owned roots as applicable. Run the exact
    floor-version marketplace add, install, second install/reinstall, list/discovery,
@@ -276,9 +302,11 @@ client transcripts, and the publication receipt remain untracked.
    pre/post inventories. Replace the run and repository prefixes with `$RUN_ROOT` and
    `$REPO_ROOT`, retain no raw transcripts or credentials, reject secret-shaped fields,
    and bound every captured string. States are `prepared`, `installed`, `exercised`,
-   `uninstalled`, `complete`, `infrastructure-blocked`, or `failed`; stable exits are
-   0 success, 2 usage, 3 unsafe target/state, 4 infrastructure block, 5 product failure,
-   and 6 residue. A usage limit, missing trust path, or unavailable required model is
+   `uninstalled`, `complete`, `recovery-required`, `quarantined`,
+   `infrastructure-blocked`, or `failed`; stable exits are 0 success, 2 usage, 3 unsafe
+   target/state or quarantined partial mutation, 4 infrastructure block, 5 product
+   failure, 6 residue, 130 interrupted by INT, and 143 interrupted by TERM. A usage
+   limit, missing trust path, or unavailable required model is
    `infrastructure-blocked`, not PASS and not a merits round.
 11. Run three cold advisory finders (correctness, tests, security) on one sealed exact
    package, assemble their results, then route the aggregate plus full gate/evidence to
@@ -334,7 +362,9 @@ client transcripts, and the publication receipt remain untracked.
 
 - 2026-07-23: Cold plan evaluation round 0 failed on the shared hook path, enforceable
   Codex launch configuration, and destructive-harness evidence controls. This revision
-  closes those three findings and returns the same merits round for reevaluation.
+  resolved the hook and launch findings. Reevaluation retained one harness-recovery
+  MAJOR; the current revision adds write-ahead substeps, deterministic reconciliation,
+  quarantine, and narrowly validated cleanup and returns the same merits round.
 - 2026-07-23: Isolated baseline installs succeeded for both clients. Codex installed
   to `<CODEX_HOME>/plugins/cache/loom/loom/0.2.0` but exposed only `loom-playbook`.
 - 2026-07-23: The OpenAI manual helper could not run because the host Homebrew Node
