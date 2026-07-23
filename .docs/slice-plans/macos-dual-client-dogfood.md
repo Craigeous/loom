@@ -419,3 +419,19 @@ client transcripts, guarded dogfood cleanup receipts below
   binary referenced a missing `libllhttp.9.3.dylib`; official Docs MCP supplied the
   current plugin/skills/hooks contracts instead. This host tooling fault is outside
   the product and does not affect the planned client-floor tests.
+- 2026-07-23 (pass 2, Steps 4-5): the plan under-specifies wire selection when hook
+  root validation itself cannot determine a client (both `PLUGIN_ROOT` and
+  `CLAUDE_PLUGIN_ROOT` validate — ambiguous — or neither does). Resolved
+  non-blockingly: both cases fail closed via the Claude-style wire (exit 2 + single-
+  line stderr, fixed reason `Loom hook input invalid for <event>.`), since that is
+  the most universally-visible failure signal and matches the pre-existing (pre-dual-
+  client) behavior this repo already shipped. Also: the PreCompact manual-block
+  reason no longer embeds the live marker SHA (dropped, kept fully static) so the
+  48-fixture set can byte-compare deterministically without pinning reproducible git
+  commit hashes; and a missing/absent `trigger` or `session_id` on PreCompact now
+  fails closed (previously missing `trigger` silently defaulted to `auto`), per spec
+  08's literal "the only accepted values manual and auto" and this pass's session-
+  scoped state requirement. jq is now an unconditional dependency for both hooks (no
+  grep/sed fallback) since malformed/wrong-typed-input classification requires real
+  JSON semantics a text fallback cannot provide; this is safe because jq 1.6+ is
+  already a hard product-wide runtime floor (spec 10).
