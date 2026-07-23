@@ -195,6 +195,46 @@ links() {
     [[ "$(<"$TEST_ROOT/README.md")" == *"static scaffolding only"* ]]
 }
 
+@test "thin adapters pass for the real repository tree" {
+    make_metadata_root
+    metadata
+    [ "$status" -eq 0 ]
+}
+
+@test "a command adapter missing its shared-skill pointer fails closed" {
+    make_metadata_root
+    sed 's#skills/loom-run/SKILL.md#skills/nowhere/SKILL.md#' "$TEST_ROOT/plugins/loom/commands/run.md" >"$TEST_ROOT/run.next"
+    mv "$TEST_ROOT/run.next" "$TEST_ROOT/plugins/loom/commands/run.md"
+    metadata
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"plugins/loom/commands/run.md: thin adapter does not route to its shared canonical body: missing reference to skills/loom-run/SKILL.md"* ]]
+}
+
+@test "a command adapter that copies the shared workflow body fails closed on line count" {
+    make_metadata_root
+    for _ in $(seq 1 20); do printf 'copied workflow body line\n' >>"$TEST_ROOT/plugins/loom/commands/run.md"; done
+    metadata
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"plugins/loom/commands/run.md: thin adapter exceeds 20 lines"* ]]
+}
+
+@test "an agent adapter missing its shared-role pointer fails closed" {
+    make_metadata_root
+    sed 's#roles/researcher\.md#roles/nowhere.md#' "$TEST_ROOT/plugins/loom/agents/researcher.md" >"$TEST_ROOT/researcher.next"
+    mv "$TEST_ROOT/researcher.next" "$TEST_ROOT/plugins/loom/agents/researcher.md"
+    metadata
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"plugins/loom/agents/researcher.md: thin adapter does not route to its shared canonical body: missing reference to roles/researcher.md"* ]]
+}
+
+@test "an agent adapter that copies the shared role body fails closed on line count" {
+    make_metadata_root
+    for _ in $(seq 1 20); do printf 'copied role body line\n' >>"$TEST_ROOT/plugins/loom/agents/researcher.md"; done
+    metadata
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"plugins/loom/agents/researcher.md: thin adapter exceeds 20 lines"* ]]
+}
+
 @test "each README client floor fails metadata validation directly when drifted" {
     for mutation in 's/Claude Code 2\.1\.216 and Codex CLI/Claude Code 2.1.215 and Codex CLI/' 's/Codex CLI 0\.144\.6\./Codex CLI 0.144.5./'; do
         make_metadata_root
@@ -625,6 +665,30 @@ EOF
     metadata
     [ "$status" -ne 0 ]
     [[ "$output" == *"codex-skill-source-v1.json: schema /expectedVersion must be equal to constant"* ]]
+}
+
+@test "a command adapter pointing at a deleted shared workflow skill fails closed" {
+    make_metadata_root
+    rm -rf "$TEST_ROOT/plugins/loom/skills/loom-run"
+    metadata
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"plugins/loom/commands/run.md: thin adapter routes to a shared canonical body that does not exist: skills/loom-run/SKILL.md"* ]]
+}
+
+@test "an agent adapter pointing at a deleted shared role contract fails closed" {
+    make_metadata_root
+    rm "$TEST_ROOT/plugins/loom/roles/researcher.md"
+    metadata
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"plugins/loom/agents/researcher.md: thin adapter routes to a shared canonical body that does not exist: roles/researcher.md"* ]]
+}
+
+@test "a second client-specific hook manifest fails closed" {
+    make_metadata_root
+    printf '{}' >"$TEST_ROOT/plugins/loom/hooks/codex-hooks.json"
+    metadata
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"plugins/loom/hooks/hooks.json: expected exactly one shared hook manifest, found: plugins/loom/hooks/codex-hooks.json, plugins/loom/hooks/hooks.json"* ]]
 }
 
 @test "missing client manifest reference fails independently" {

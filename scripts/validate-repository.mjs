@@ -265,12 +265,50 @@ function validateClientVisibleClaims() {
   return valid;
 }
 
+const THIN_ADAPTER_MAX_LINES = 20;
+const THIN_ADAPTER_PATTERNS = [
+  [/^plugins\/loom\/commands\/([^/]+)\.md$/, (name) => `skills/loom-${name}/SKILL.md`],
+  [/^plugins\/loom\/agents\/([^/]+)\.md$/, (name) => `roles/${name}.md`]
+];
+// Claude commands/agents SHALL be thin routes to the shared canonical
+// skills/roles content (spec 10 "one distribution, two catalogs"; ADR 0018
+// decision 3): short, and pointing at the exact shared body it adapts. This
+// is a mechanical proxy against a divergent second implementation ("copying
+// helpers or workflow bodies into client directories is a conformance
+// failure").
+function validateThinAdapters() {
+  let valid = true;
+  for (const relative of files) {
+    const matched = THIN_ADAPTER_PATTERNS.find(([pattern]) => pattern.test(relative));
+    if (!matched) continue;
+    const [pattern, pointerFor] = matched;
+    const name = relative.match(pattern)[1];
+    const text = readText(relative);
+    if (text === null) continue;
+    const lineCount = text.split("\n").length;
+    if (lineCount > THIN_ADAPTER_MAX_LINES) {
+      report(relative, `thin adapter exceeds ${THIN_ADAPTER_MAX_LINES} lines (${lineCount}); a client adapter must route to its shared canonical body, not copy it`);
+      valid = false;
+    }
+    const pointer = pointerFor(name);
+    if (!text.includes(pointer)) {
+      report(relative, `thin adapter does not route to its shared canonical body: missing reference to ${pointer}`);
+      valid = false;
+    } else if (!safeNode(`plugins/loom/${pointer}`, { missing: false, regularFile: true })) {
+      report(relative, `thin adapter routes to a shared canonical body that does not exist: ${pointer}`);
+      valid = false;
+    }
+  }
+  return valid;
+}
+
 async function validateMetadata() {
   let structurallyValid = true;
   for (const relative of files.filter((file) => file.endsWith(".json"))) {
     if (readJson(relative) === JSON_READ_FAILURE) structurallyValid = false;
   }
   if (!validateClientVisibleClaims()) structurallyValid = false;
+  if (!validateThinAdapters()) structurallyValid = false;
 
   const authorizedCatalogs = new Set([
     ".claude-plugin/marketplace.json",
@@ -491,6 +529,15 @@ function semanticMetadata() {
   ];
   for (const [index, binding] of roots.entries()) {
     if (!deepEqual(binding, expectedRoots[index])) report(rootPaths[index], "installed-root contract drift");
+  }
+
+  // One physical hook manifest for both clients (spec 08; ADR 0018 decision
+  // 4): the Codex root binding above pins hookManifest to exactly
+  // ./hooks/hooks.json, and no second client-specific hook manifest may
+  // exist alongside it.
+  const hookManifests = files.filter((relative) => /^plugins\/loom\/hooks\/[^/]+\.json$/.test(relative));
+  if (!deepEqual(hookManifests, ["plugins/loom/hooks/hooks.json"])) {
+    report("plugins/loom/hooks/hooks.json", `expected exactly one shared hook manifest, found: ${hookManifests.join(", ") || "none"}`);
   }
 }
 function validateCatalogSource(catalogPath, source) {
