@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/craigeous/loom/schemas/loom-dogfood-evidence-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "runId",
+    "marker",
+    "candidate",
+    "tree",
+    "harnessHash",
+    "fixtureHash",
+    "schemaHash",
+    "platform",
+    "clientFloors",
+    "state",
+    "exit",
+    "roots",
+    "commands",
+    "preInventoryHash",
+    "postInventoryHash"
+  ],
+  "properties": {
+    "schema": { "const": "loom-dogfood-evidence/v1" },
+    "runId": { "type": "string", "minLength": 1 },
+    "marker": { "type": "string", "minLength": 16 },
+    "candidate": { "type": "string", "minLength": 7 },
+    "tree": { "type": "string", "minLength": 7 },
+    "harnessHash": { "type": "string", "minLength": 1 },
+    "fixtureHash": { "type": "string", "minLength": 1 },
+    "schemaHash": { "type": "string", "minLength": 1 },
+    "platform": { "const": "darwin-arm64" },
+    "clientFloors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claude", "codex"],
+      "properties": {
+        "claude": { "type": "string", "minLength": 1 },
+        "codex": { "type": "string", "minLength": 1 }
+      }
+    },
+    "state": {
+      "enum": [
+        "prepared",
+        "installed",
+        "exercised",
+        "uninstalled",
+        "complete",
+        "recovery-required",
+        "quarantined",
+        "infrastructure-blocked",
+        "failed"
+      ]
+    },
+    "exit": { "enum": [0, 2, 3, 4, 5, 6, 130, 143] },
+    "roots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claudeHome", "codexHome", "project", "systemHome", "tmp"],
+      "properties": {
+        "claudeHome": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "codexHome": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "project": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "systemHome": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "tmp": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["substep", "client", "opKey", "exit", "outputHash"],
+        "properties": {
+          "substep": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "client": { "enum": ["claude", "codex"] },
+          "opKey": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "exit": { "type": "integer", "minimum": 0, "maximum": 255 },
+          "outputHash": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "roleReturn": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "client": { "enum": ["claude", "codex"] },
+        "role": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "cold": { "const": true },
+        "delegation": { "const": false },
+        "boundedOutputHash": { "type": "string", "minLength": 1 }
+      }
+    },
+    "trustResult": { "type": ["string", "null"], "maxLength": 256 },
+    "preInventoryHash": { "type": "string", "minLength": 1 },
+    "postInventoryHash": { "type": ["string", "null"] },
+    "quarantineReason": { "type": ["string", "null"], "maxLength": 512 }
+  }
+}

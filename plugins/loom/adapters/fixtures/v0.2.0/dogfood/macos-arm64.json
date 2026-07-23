@@ -1,0 +1,45 @@
+{
+  "schema": "loom-dogfood-fixture/v1",
+  "platform": "darwin-arm64",
+  "clientFloors": { "claude": "2.1.216", "codex": "0.144.6" },
+  "marketplaceName": "loom",
+  "pluginName": "loom",
+  "pluginVersion": "0.2.0",
+  "handshakeTimeoutSeconds": 20,
+  "environment": {
+    "claude": {
+      "HOME": "$RUN_ROOT/system-home",
+      "CLAUDE_CONFIG_DIR": "$RUN_ROOT/claude-home",
+      "TMPDIR": "$RUN_ROOT/tmp"
+    },
+    "codex": {
+      "HOME": "$RUN_ROOT/system-home",
+      "CODEX_HOME": "$RUN_ROOT/codex-home",
+      "TMPDIR": "$RUN_ROOT/tmp"
+    }
+  },
+  "allowedRoots": {
+    "claude": ["claude-home", "system-home", "tmp"],
+    "codex": ["codex-home", "system-home", "tmp"]
+  },
+  "cacheLayout": {
+    "claude": "$RUN_ROOT/claude-home/plugins/cache/loom/loom",
+    "codex": "$RUN_ROOT/codex-home/plugins/cache/loom/loom/0.2.0"
+  },
+  "commands": {
+    "claude": {
+      "marketplace-add": ["plugin", "marketplace", "add", "$REPO_ROOT", "--scope", "user"],
+      "install": ["plugin", "install", "loom@loom", "--scope", "user"],
+      "list": ["plugin", "list", "--json"],
+      "uninstall": ["plugin", "uninstall", "loom@loom", "--scope", "user", "-y"],
+      "marketplace-remove": ["plugin", "marketplace", "remove", "loom"]
+    },
+    "codex": {
+      "marketplace-add": ["plugin", "marketplace", "add", "$REPO_ROOT", "--json"],
+      "install": ["plugin", "add", "loom@loom", "--json"],
+      "list": ["plugin", "list"],
+      "uninstall": ["plugin", "remove", "loom@loom", "--json"],
+      "marketplace-remove": ["plugin", "marketplace", "remove", "loom", "--json"]
+    }
+  }
+}
