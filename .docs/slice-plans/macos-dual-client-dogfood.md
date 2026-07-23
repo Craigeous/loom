@@ -1,6 +1,6 @@
 # Apple-silicon Claude Code + Codex dogfood
 
-Status: Plan Review
+Status: Approved
 Target specs: [02-roles.md](../spec/02-roles.md),
 [06-init-modes.md](../spec/06-init-modes.md),
 [07-command-surface.md](../spec/07-command-surface.md),

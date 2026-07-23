@@ -83,3 +83,44 @@ can orphan a mutator. The separate `released` state and release record also leav
 recovery gap. Specify a durable supervisor plus a gated worker whose recorded PID is
 preserved across exec, one atomic release record per gate, process-group/token orphan
 proof, and exact recovery for pre-release aborts, supervisor death, and native orphans.
+
+---
+
+## Reevaluation of revision `49b7b64`
+
+Verdict: PASS
+Round: 0
+Reviewed commit: `49b7b64883c31f0964643e6f2112464e95b69514`
+Reviewed tree: `abbebadc9187a4412c10298f11af9b8c2775aa9a`
+Sealed package: `/private/tmp/loom-macos-dual-client-plan-49b7b64-r0.LQzDiO`
+Manifest SHA-256: `60e066f689e5183f63dd61f7bbc4c3d6e6b3180527ad5249f019920be106d934`
+Input inventory SHA-256: `58147176be05338a82f0ccab0d0e97220c4b1495bab412ba85568460b878fa77`
+Verdict SHA-256: `1825d2026503a27134659d58c64650ce25cc70b4b71a961f46a7c25545124e5c`
+
+All sealed bindings validated exact; the diff touches only the slice-plan, this
+evaluation record, and the two READMEs, with no spec/ADR edits. Both previously
+required changes are resolved: launch-to-identity durability (the native worker
+journals its own PID/birth in `native-hello` and blocks until the single atomic
+`native-release` record permits `exec`, so no mutating process is live before its
+identity is durable) and release-to-native topology (a durable supervisor separate
+from the gated worker records the terminal outcome after process replacement; the
+journaled worker PID is preserved across `exec`; one atomic release record per
+gate; token-and-process-group orphan proof spans the process table; exact recovery
+is specified for pre-release aborts, supervisor death, native orphaning, and
+worker/supervisor death without terminal, with quarantine and
+`recovered-after-apply` transitions). The interruption/injection matrix surrounds
+every journal record and covers each claimed boundary with falsifiable assertions.
+Spec fidelity verified mechanically against the sealed candidate tree (workflow/role
+skill mapping, hook envelopes and single `./hooks/hooks.json`, profile map, 48
+hook-wire fixtures). Zero BLOCKER and zero MAJOR findings.
+
+Two MINOR findings carried (non-blocking, address during implementation):
+
+- [MINOR] Verification 1 invokes `scripts/check`, which is not in the path
+  boundary while the slice adds new Bats suites. Confirm `scripts/check`
+  auto-discovers them; if it must be edited to register them, add it to the path
+  boundary before landing.
+- [MINOR] The developer-facing path boundary enumerates this evaluation record,
+  which is recorder-owned, not developer-produced. Optionally scope the
+  evaluation-record paths to the recorder to avoid implying the developer edits
+  its own verdict.
