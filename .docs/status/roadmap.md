@@ -16,6 +16,10 @@ Milestone order for building loom. "What's next and why"; detailed status in
   for Claude Code 2.1.218 and Codex CLI 0.144.6 (Codex's cold role-launch leg is
   `infrastructure-blocked` by a by-design credential-less isolated `CODEX_HOME`, not
   a product defect).
+- [ ] **M1 — Fix coordinator safety** (in progress): `[x] coord-identifier-boundaries`
+  (centralized `loom-coord` identifier validation — session ids, decoded-blob sids,
+  PIDs, slice names; `Ready to Publish` pending settlement); next
+  `coord-lock-ownership`, then `coord-schema-cas`.
 
 M0 is authoritative at settled remote result `51b249e`. Both the program-amendment and
 `macos-dual-client-dogfood` checkboxes are prospective until each candidate's

@@ -16,8 +16,25 @@ source of truth; `roadmap.md` is milestone order.
 
 ## Where things stand
 
+- **M1 slice 1 `coord-identifier-boundaries` COMPLETE (pending publication
+  settlement).** Centralized identifier validation landed in
+  `plugins/loom/bin/loom-coord`: two-grammar split — strict `_valid_identifier`
+  (session ids, decoded-blob sids, PIDs) vs. narrow `_valid_slice_name`
+  (held-claims line format, preserving the `:`/`..` freeform-slice capability);
+  decoded-blob sids guarded before path use; `_remove_session_dir` replaces
+  computed-path `rm -rf` with known-file + `rmdir` quarantine; `cmd_cleanup`'s `T3`
+  sweep case flips to quarantine (plan-authorized). 18 new `NEG-ID` negatives
+  (82/82 `loom-coord.bats`); `LOOM_DIFF_BASE=HEAD scripts/check` green 452/452.
+  Plan-eval FAILed round 0 (slice-name grammar broke `SC1`/`V5b`) → revised →
+  Approved. Bootstrap `/code-review`+`/security-review` clean at 4 MINOR (T1-T3
+  secondary-call-site test-coverage gaps, T4 a NEG-ID count doc miscount);
+  code-eval PASS round 0. `Status: Ready to Publish` (ADR 0023 §4). Slice-plan
+  archived. **NEXT ACTION: plan M1 slice 2 `coord-lock-ownership`** (per
+  `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety"). Also
+  landed on `main` during this slice (separate commit): `0ae81c1`, a Linux CI
+  `stat -f` GNU/BSD portability fix — hosted CI green both lanes.
 - **Owner decisions 2026-07-24 (governance deferred-decisions resolved) + M1 planning
-  started.** Two owner decisions are recorded (details in `progress.md` → Current
+  started (historical — M1 slice 1 above is now complete).** Two owner decisions are recorded (details in `progress.md` → Current
   state / M0 errata): (1) **SCHEDULE `client-floor-adapter-smoke`, do not retire** —
   it is already an ADR 0023 §1 authorized M0 follow-up, so scheduling it needs **no
   new ADR**; the improvement plan now carries a restored `### Slice:
@@ -304,14 +321,18 @@ source of truth; `roadmap.md` is milestone order.
   read-filter false-positive documented as accepted limitation in
   `commit-convention.md`, commit d35b565).
 
-## Immediate next steps
+0. **NEXT ACTION — plan M1 slice 2 `coord-lock-ownership`.** M1 slice 1
+   (`coord-identifier-boundaries`) is COMPLETE (`Ready to Publish`, pending
+   publication settlement) — see "Where things stand" above. Per
+   `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety",
+   `coord-lock-ownership` is next, then `coord-schema-cas`.
 
-0. **NEXT ACTION — owner-directed.** All post-M4 threads are **COMPLETE**: multi-session
-   coordination (ADR 0014/0015/0016 → `loom-coord.sh` → playbook wiring), infra-blocked
-   escalation (ADR 0017 → specs 03/04 amended → playbook wiring), and CLAUDE.md Shape and
-   Concision Discipline (spec 08 → `claude-md-slim-down` slice). **No pending slices. No open
-   follow-up items.** Future work is owner-directed — new ADR/spec-driven features or
-   packaging/release.
+0. **COMPLETED (historical) — owner-directed.** All post-M4 threads were
+   **COMPLETE**: multi-session coordination (ADR 0014/0015/0016 → `loom-coord.sh` →
+   playbook wiring), infra-blocked escalation (ADR 0017 → specs 03/04 amended →
+   playbook wiring), and CLAUDE.md Shape and Concision Discipline (spec 08 →
+   `claude-md-slim-down` slice), before M1 (repository improvement program)
+   planning started.
 
 0. **COMPLETED — Slice W: `multi-session-playbook-wiring`.** Pure-docs: wired
    `parallelism.md`, `orchestration.md`, `commands/run.md`, `SKILL.md` to describe

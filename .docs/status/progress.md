@@ -6,6 +6,34 @@ The status source of truth and decision index for building loom.
 
 ## Current state
 
+- **Last action — M1 slice 1 `coord-identifier-boundaries` COMPLETE (pending
+  publication settlement).** Centralized identifier validation landed in
+  `plugins/loom/bin/loom-coord`: a two-grammar split — strict `_valid_identifier`
+  (session ids, decoded-blob sids, PIDs: no `/`, no `..`, no whitespace/control
+  bytes) and narrow `_valid_slice_name` (held-claims line format only, preserving
+  the tested `:`/`..` freeform-slice-name capability); decoded-blob sids validated
+  before path use in `cmd_cleanup`/`cmd_reclaim`; `_remove_session_dir` replaces
+  `rm -rf` of computed session dirs with known-file deletion + `rmdir` quarantine;
+  `cmd_cleanup`'s `T3` sweep case flips to quarantine on a malformed decoded sid
+  (plan-authorized). 18 new `NEG-ID` negatives (64 pre-existing unchanged + `T3`
+  flip + 18 new = 82/82); `LOOM_DIFF_BASE=HEAD scripts/check` green, 452/452 Bats.
+  Plan-eval FAILed round 0 (slice-name grammar over-restriction breaking two
+  existing tests `SC1`/`V5b`) → revised to the two-grammar split → Approved.
+  Bootstrap sealed-package review (`/code-review` + `/security-review`) clean at 4
+  MINOR (T1-T3 secondary-call-site test-coverage gaps — `cmd_session_bootstrap`/
+  `cmd_session_end` quarantine-skip path, `cleanup --session` negative,
+  `cmd_release_claim`/`cmd_reclaim` bad-slice-name negative — plus T4 a NEG-ID
+  count doc miscount in the plan's Implementation Record, 17 vs actual 18); no
+  BLOCKER/MAJOR. Code-eval PASS round 0; `Status: Ready to Publish` (ADR 0023 §4 —
+  not `Landed` until remote settlement). The four MINORs are an optional future
+  pass, not a blocking follow-up. Slice-plan archived to
+  `.docs/slice-plans/archive/coord-identifier-boundaries.md`.
+  **Also landed on `main` during this slice (separate commit, not part of the
+  slice diff):** `0ae81c1` — a Linux CI portability fix for `dir_mtime_epoch`'s
+  GNU-vs-BSD `stat -f` divergence (T1 from the earlier multi-session-lock-helper
+  thread, see `handoff.md`); hosted CI is green on both lanes.
+- **Next action:** plan the M1 slice 2 `coord-lock-ownership` slice (per
+  `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety").
 - **Last action (owner decisions, 2026-07-24 — governance deferred-decisions
   resolved).** Two owner decisions were recorded and the governance slice's two
   deferred owner questions are now settled:
@@ -28,8 +56,8 @@ The status source of truth and decision index for building loom.
   The governance slice's second deferred item — the ADR 0023 §7 single-session
   publication precondition / M2 duplication — is **not** part of these decisions and
   remains deferred to M2 planning, as the governance plan noted.
-- **Next action:** plan the M1 `coord-identifier-boundaries` slice (first coordinator
-  safety slice; centralized identifier validation for `plugins/loom/bin/loom-coord`).
+  (Superseded — next action above: M1 slice 1 is now complete; proceed to slice 2
+  `coord-lock-ownership`.)
 - **Phase:** **Private Apple-silicon dual-client dogfood checkpoint reached.**
   `macos-dual-client-dogfood` is `Ready to Publish` (resolving code-eval PASS round
   0, archived) pending the protected ADR-0023 intent/receipt/settlement sequence,

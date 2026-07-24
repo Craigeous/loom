@@ -35,6 +35,15 @@ PASS/FAIL + severity rules are in
 - [macOS dual-client dogfood code evaluation](macos-dual-client-dogfood-eval.md) —
   FAIL round 0 (harness injection-coverage + cleanup hardening) → fix → resolving
   PASS round 0; `Ready to Publish` pending ADR-0023 settlement.
+- [coord-identifier-boundaries plan evaluation](coord-identifier-boundaries-plan-eval.md)
+  — FAIL round 0 (slice-name grammar over-restriction breaking SC1/V5b) → revised →
+  Approved.
+- [coord-identifier-boundaries review findings](coord-identifier-boundaries-review-findings.md)
+  — bootstrap `/code-review`+`/security-review`, 4 MINOR findings (T1-T4: secondary
+  call-site test-coverage gaps + a NEG-ID doc miscount), no BLOCKER/MAJOR.
+- [coord-identifier-boundaries code evaluation](coord-identifier-boundaries-eval.md) —
+  PASS round 0 (M1 slice 1); all four review findings adjudicated CONFIRMED MINOR,
+  non-blocking; `Ready to Publish` pending ADR-0023 settlement.
 
 See also [`../status/progress.md`](../status/progress.md) § "M0 errata" — the
 record-keeping reconciliation of four early-stretch process deviations found by the

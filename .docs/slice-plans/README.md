@@ -17,17 +17,23 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-- [coord-identifier-boundaries.md](coord-identifier-boundaries.md) — `Implemented` —
-  M1 coordinator-safety slice: add centralized identifier validation (session ids,
-  slice names, PIDs; grammar `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`, no `/`, `..`,
-  whitespace, control bytes, Unicode separators) to `plugins/loom/bin/loom-coord`,
-  validate session ids decoded from claim blobs before path use, replace `rm -rf` of
-  computed session dirs with known-file deletion + `rmdir`, and quarantine malformed
-  persisted state so no identifier can escape `.git/loom`. Code-bearing ADR 0023 §1
-  bootstrap slice (sealed-package review at `Implemented`). Path boundary:
-  `loom-coord` + its bats + these `.docs` lifecycle files only.
+(none)
 
 ## Archived plans
+
+- [archive/coord-identifier-boundaries.md](archive/coord-identifier-boundaries.md) —
+  `Ready to Publish` (pending ADR-0023 publication settlement) — M1 slice 1
+  coordinator-safety: centralized identifier validation in `plugins/loom/bin/loom-coord`
+  via a two-grammar split — the strict `_valid_identifier` (session ids, decoded-blob
+  sids, PIDs: no `/`, no `..`, no whitespace/control bytes) and the narrow
+  `_valid_slice_name` (held-claims line format only, preserving the tested `:`/`..`
+  freeform-slice-name capability). Guards decoded-blob sids before path use; replaces
+  `rm -rf` of computed session dirs with `_remove_session_dir`'s known-file
+  deletion + `rmdir` quarantine; `cmd_cleanup`'s T3 sweep flips to quarantine on a
+  malformed decoded sid. 18 new `NEG-ID` negative cases (64 pre-existing unchanged +
+  T3 flip + 18 new = 82/82). Code-bearing ADR 0023 §1 bootstrap slice: sealed-package
+  bootstrap review clean at 4 MINOR (test-coverage gaps at secondary call sites +
+  a doc miscount), code-eval PASS round 0.
 
 - [archive/governance-baseline-reconciliation.md](archive/governance-baseline-reconciliation.md) — `Archived` —
   post-M0 record-keeping: M0 errata (13 non-uniform-identity commits, merge 44f16a4,
