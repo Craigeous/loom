@@ -57,7 +57,43 @@ blind code evaluator owns adjudication and the verdict.
   defense-in-depth, not a live single-user exploit. Every other clean-path field
   is strictly validated; runId is the lone hole.
 
-## Guards that held (no finding)
+## Resolving re-review (head `a000cef`)
+
+Run: `macos-dual-client-dogfood-a000cef-code-r0-resolve`
+Head: `a000cefc9bc893db5e6bd54b865342081e9fdb27`
+Head tree: `efc193904b237a5f62759425fc435b7edcd9cb44`
+Sealed package: `/private/tmp/loom-macos-dogfood-code-r0b.RdTGq8`
+Manifest SHA-256: `da61c862902ed4eb5baeb768d5cc36b27bf0afe026af8d114c7a14e626897b84`
+Producer gate (recorded in manifest): `LOOM_DIFF_BASE=HEAD scripts/check` exit 0,
+434 Bats tests, sealed head export, synthetic git context.
+
+Aggregate state: `bootstrap-ran-with-findings`
+
+Three fresh cold workers re-reviewed the fixed head (findings do not carry
+forward across a head change). Mechanical validation passed for all three
+(completeness, echoed hashes, parseability, diff intersection; the tests worker
+reported its finding under a `location` field rather than `file` — recorded).
+
+- **Correctness: no findings.** Fix layer traced clean: double-guarded
+  containment walk; runId gate accepts minted tokens, rejects traversal forms;
+  once-only late-release rescue remains recoverable within the same attempt;
+  writer-settle defers to the supervisor's recorded abort. No fix-introduced
+  regression found in the release topology.
+- **Tests: 1 finding.** `tests-after-native-release-uncovered` (proposed MINOR,
+  `scripts/macos-dual-client-dogfood:837`): injection census at this head is 12
+  implemented / 11 covered; only `after:native-release` lacks a direct case.
+  Mitigated: it is immediately adjacent to the covered
+  `supervisor-die-while-worker-continues` point with no code between and
+  identical program state. All 8 resolving cases verified non-vacuous (each
+  turned red with its branch broken); the T2 parameterization genuinely
+  exercises 4 distinct operations including a codex opKey. Prior T1/T2/C1/S1
+  are resolved. The previously reported INT/130 flake reproduced 0 times.
+- **Security: no findings.** Both new guards held under mechanical attack
+  (charset/NUL/traversal on `_validate_run_id`; symlink-swap/TOCTOU/newline
+  paths on `_verify_inventory_containment`; `rm -rf --` confirmed
+  non-symlink-following; marker re-validated pre-delete).
+
+## Guards that held (no finding, first round)
 
 The `--clean` recursive-delete containment set failed closed under mechanical
 bypass attempts (ancestor/top-level symlink, dot-dot, outside-tmp, owner-home
