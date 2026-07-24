@@ -1,6 +1,6 @@
 # Governance: reconcile the M0 record with reality (record-keeping only)
 
-Status: Approved
+Status: Implemented
 Target specs: none (no spec edits — see Notes)
 Authority: [ADR 0023](../ADR/0023-repository-self-hosting-bootstrap-transition.md),
 [ADR 0024](../ADR/0024-macos-first-dual-client-dogfood-bootstrap-amendment.md)
@@ -100,6 +100,15 @@ Each item has a named mechanical check; all must pass.
 
 ## Notes
 
+- 2026-07-24 (implemented): All four named mechanical checks re-run and passed. Identity
+  count `13` matched (69-commit range confirmed). `git grep bootstrap-authority-b28a747`
+  over `.docs/` history plus a full scan of the transition `state.json` history at
+  `origin/loom/bootstrap-transition` tip `32c5315` found **zero** anchoring references —
+  recorded as an errata fact in `progress.md`; keep-vs-delete left to the owner.
+  `LOOM_DIFF_BASE=HEAD scripts/check` exited 0 (434/434 tests, relative-links + Claude
+  plugin validation passed). Edited: `progress.md` (M0 errata subsection), `roadmap.md`
+  (M0 Landed precision), `evaluations/README.md` (pointer), `slice-plans/README.md`
+  (index entry). No spec/ADR/transition-state/remote-ref edits.
 - 2026-07-24 (round-0 revision): De-scoped to record-keeping only after plan-eval
   FAIL round 0 (`.docs/evaluations/governance-baseline-reconciliation-plan-eval.md`).
   Removed the two authority/design changes and their spec + transition-state edits;

@@ -570,6 +570,54 @@ The status source of truth and decision index for building loom.
   round-limit/escalation polished; resume-after-interruption verified across
   machines; `claude -p` deep-nesting fallback evaluated.
 
+## M0 errata
+
+Record-keeping only (`governance-baseline-reconciliation` slice, 2026-07-24); no history
+is rewritten and no commit is re-authored. See also the pointer line in
+[`../evaluations/README.md`](../evaluations/README.md).
+
+**M0 Landed — precise scope.** M0 covers a static reproducible local-gate baseline plus a
+macOS-arm64 (Apple silicon) behavioral dogfood pass (`macos-dual-client-dogfood`); the
+Codex cold-launch role-invocation leg is `infrastructure-blocked` (a live 401 from an
+isolated, credential-less `CODEX_HOME` by design), not a product defect. Ubuntu/Intel
+release obligations and public Codex support are **not** covered by M0 — they remain owed
+by ADR 0019 at release.
+
+**Early-stretch process deviations (2026-07-24 reviews).** Two independent post-M0
+reviews (program-design review and implementation audit) found the dogfood slice's
+record clean but the earlier ci-baseline/amendment stretch carries four unrecorded
+deviations from the intended process. History is immutable; nothing below is rewritten
+or re-authored — this is a factual record of what happened:
+
+(a) **Non-uniform commit identity (ADR 0003 violation).** 13 commits in the
+`c7bd84d..a3cb007` range (69 commits total) carry non-uniform author/committer
+identities — `loom@localhost`, `loom-recorder@invalid`, and `loom@local` — instead of
+the single configured owner identity ADR 0003 requires. Verified: `git log
+--format='%ae' c7bd84d..a3cb007 | grep -Ec 'loom@localhost|loom-recorder@invalid|
+loom@local'` → `13`.
+
+(b) **Merge commit breaks the linear direct-push model.** `44f16a4` ("Integrate accepted
+ADR 0024 authority") is a two-parent merge commit, not a direct linear commit,
+departing from loom's normal fast-forward/direct-push discipline.
+
+(c) **ci-baseline publication-mode mismatch.** ci-baseline landed via GitHub **PR #3**
+(rebase-merge), while its own settlement record states `publication_mode: remote-direct`
+— the recorded mode and the actual landing mechanism disagree.
+
+(d) **ci-baseline evidence set incomplete.** ci-baseline's in-tree evidence set is
+missing a plan-eval record and an evidence JSON, an incomplete instance of the evidence
+package the program otherwise expects.
+
+**Branch/PR hygiene (performed 2026-07-24).** PR #1 and PR #2 were closed and four
+redundant remote branches were deleted on 2026-07-24. A fifth candidate,
+`loom/bootstrap-authority-b28a747`, was scanned rather than deleted: it still exists on
+the remote (`git ls-remote --heads origin loom/bootstrap-authority-b28a747` →
+`b28a747…`), and a reference scan (`git grep -n bootstrap-authority-b28a747` over
+`.docs/`, plus a full scan of the protected transition `state.json` history at
+`origin/loom/bootstrap-transition` tip `32c5315`) found **zero** anchoring references —
+no living-doc, evaluation, or transition-state record depends on it. The keep-vs-delete
+decision is left to the owner; this slice does not delete the branch.
+
 ## Accepted decisions (ADRs)
 
 0001 plugin/orchestrator · 0002 model tiers · 0003 commit-per-handoff · 0004 blind

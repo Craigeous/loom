@@ -36,5 +36,11 @@ PASS/FAIL + severity rules are in
   FAIL round 0 (harness injection-coverage + cleanup hardening) → fix → resolving
   PASS round 0; `Ready to Publish` pending ADR-0023 settlement.
 
+See also [`../status/progress.md`](../status/progress.md) § "M0 errata" — the
+record-keeping reconciliation of four early-stretch process deviations found by the
+2026-07-24 program-design and implementation-audit reviews (non-uniform commit
+identity, a merge commit, a PR-vs-`remote-direct` publication-mode mismatch, and an
+incomplete ci-baseline evidence set).
+
 All other files in this directory remain durable historical verdicts and are not
 rewritten when a later decision supersedes their subject.

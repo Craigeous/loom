@@ -24,6 +24,13 @@ publication. ADR 0019's Ubuntu and both macOS architecture release matrix remain
 unchanged and mandatory; this checkpoint is a private Apple-silicon dogfood milestone
 only, not a public release or public Codex support.
 
+**M0 Landed — precise scope.** M0 covers a static reproducible local-gate baseline plus
+a macOS-arm64 behavioral dogfood pass; the Codex cold-launch leg is
+`infrastructure-blocked` (a credential-less isolated `CODEX_HOME` by design), not a
+product defect. Ubuntu/Intel release obligations and public Codex support are **not**
+covered by M0 — they remain owed by ADR 0019 at release. See `.docs/status/progress.md`
+§ "M0 errata" for the full early-stretch process record.
+
 ## M0 — Design (complete)
 
 - [x] Foundational design conversation with the owner.
