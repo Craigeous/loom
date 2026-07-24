@@ -1,6 +1,6 @@
 # Governance: reconcile the M0 record with reality (record-keeping only)
 
-Status: Implemented
+Status: Archived
 Target specs: none (no spec edits — see Notes)
 Authority: [ADR 0023](../ADR/0023-repository-self-hosting-bootstrap-transition.md),
 [ADR 0024](../ADR/0024-macos-first-dual-client-dogfood-bootstrap-amendment.md)

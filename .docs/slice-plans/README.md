@@ -27,6 +27,11 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Archived plans
 
+- [archive/governance-baseline-reconciliation.md](archive/governance-baseline-reconciliation.md) — `Archived` —
+  post-M0 record-keeping: M0 errata (13 non-uniform-identity commits, merge 44f16a4,
+  PR-#3-vs-remote-direct mismatch, incomplete ci-baseline evidence), M0-Landed precision,
+  PR/branch hygiene record + b28a747 zero-reference scan. Code-eval PASS round 0.
+
 - [archive/macos-dual-client-dogfood.md](archive/macos-dual-client-dogfood.md) — `Ready to
   Publish` (pending ADR-0023 publication settlement) — implemented and privately proved the
   shared Claude/Codex workflows and role contracts, `loom-resolve-helper` installed-root
