@@ -64,3 +64,32 @@ credentialless Codex cold-launch 401 honestly as `infrastructure-blocked`
 The slice returns to `In Progress`. A resolving PASS shares Round 0 per the
 spec 03 FAIL-only counting rule; the re-review requires a fresh sealed package
 at the new head (prior findings and verdicts do not carry forward).
+
+---
+
+## Resolving re-review of head `a000cef`
+
+Verdict: PASS
+Round: 0 (resolving; shares Round 0 per the FAIL-only counting rule)
+Reviewed commit: `a000cefc9bc893db5e6bd54b865342081e9fdb27`
+Reviewed tree: `efc193904b237a5f62759425fc435b7edcd9cb44`
+Base: `a3cb007b5ddb3307867fc2f321a0368bfeac9336`
+Sealed package: `/private/tmp/loom-macos-dogfood-code-r0b.RdTGq8`
+Manifest SHA-256: `da61c862902ed4eb5baeb768d5cc36b27bf0afe026af8d114c7a14e626897b84`
+Verdict SHA-256: `d0a8dc1e1629d435fbec1e6cef5a49e6bfd2b421c502fb61ee7908e1529276eb`
+
+Independent gate rerun GREEN (`LOOM_DIFF_BASE=HEAD scripts/check` exit 0,
+434/434 Bats, starting inventory verified 328/328 before execution). All four
+prior required changes verified resolved — the evaluator itself broke two of
+the new T1 test branches against production logic and observed both go red
+(non-vacuous), and confirmed the C1 containment walk, S1 runId gate + schema
+pattern, and T2 multi-operation parameterization with their red-green
+regression tests. The single advisory finding
+(`tests-after-native-release-uncovered`) is CONFIRMED MINOR, non-blocking:
+the label is byte-identical in program state to the covered adjacent
+injection point; Step 8's "injected points surround every journal record"
+obligation is met. Path boundary: 104 changed paths, zero outside the plan
+allowlist. Zero BLOCKER, zero MAJOR → PASS. Per ADR 0023 §4 the slice may
+advance to `Ready to Publish`; ADR 0020/specs 03–04 publication authority,
+fresh remote verification, and receipt requirements still apply before
+`Landed`.
