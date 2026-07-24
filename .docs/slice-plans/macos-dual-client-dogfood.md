@@ -1,6 +1,6 @@
 # Apple-silicon Claude Code + Codex dogfood
 
-Status: In Progress
+Status: Implemented
 Target specs: [02-roles.md](../spec/02-roles.md),
 [06-init-modes.md](../spec/06-init-modes.md),
 [07-command-surface.md](../spec/07-command-surface.md),
@@ -556,3 +556,45 @@ client transcripts, guarded dogfood cleanup receipts below
   Codex credential available to the isolated home) or the code evaluator/owner
   otherwise adjudicates the evidence as sufficient. Steps 11 (three cold advisory
   finders + code-evaluator routing) and 12 (archival) remain for later roles.
+- 2026-07-24 (pass 6, round-0 code-eval FAIL remediation): all four required
+  changes resolved. **T1 (blocking):** added the 6 previously-untested injection
+  Bats cases -- `before:native-hello` (proves both the supervisor's own
+  `worker-hello-timeout` abort AND the orchestrator's gate-2 writer-settle wait,
+  asserting exactly one abort record with the supervisor's reason, never the
+  orchestrator's own racing fallback), `before:supervisor-hello` (gate-1's
+  fallback timeout-abort path, no writer to settle on since hello itself never
+  existed), `before:native-release` (the dying supervisor leaves the blocked-but-
+  still-alive worker to be rescued by the orchestrator's own once-only late
+  release grant -- discovered empirically that this resolves within the SAME
+  attempt, not a fresh retry, and can legitimately race between an instant
+  "applied" and a "quarantine" pending one more reconciling call, mirroring the
+  pre-existing `supervisor-die-while-worker-continues` case), `before:terminal`
+  (reconciles to `recovered-after-apply` since the worker had already fully
+  exited before the supervisor died) and `after:terminal` (applies directly from
+  the already-durable terminal record, no `recovered-after-apply` marker). Each
+  case was proven load-bearing by breaking its specific branch (disabling the
+  resume-grant condition, the found-terminal short-circuit, the reconcile-post-
+  apply gate, or mutating an abort-reason string), observing the exact assertion
+  RED, then restoring and reconfirming GREEN. **T2:** added a parameterized case
+  driving the same `after:supervisor-hello` injection across marketplace-add,
+  uninstall, marketplace-remove, and a `codex install` opKey in one test (RED
+  demonstrated by corrupting `_postcondition_label`'s claude-uninstall branch --
+  a break the pre-existing claude-install-only test could not have caught).
+  **C1:** `--clean` now calls `_verify_inventory_containment` on a quarantined
+  run's freshly recomputed inventory before `rm -rf`: it fails closed if any of
+  the five owned roots is itself a symlink (the actual escape shape, since
+  `_inventory_root`'s `find` never descends through a directory symlink) and
+  re-canonicalizes every entry's parent as defense in depth; marker ownership is
+  now also re-confirmed via `_validate_marker` immediately before the delete, not
+  just once at function entry. **S1:** added `_validate_run_id` (strict
+  `^[A-Za-z0-9_-]+$` charset gate) called on the `state.json`-sourced `runId`
+  before it builds the receipt filename, fail-closed exit 3 on a tampered
+  non-charset value (e.g. a `../` escape); added the matching `pattern` to
+  `loom-dogfood-state-v1.schema.json`'s `runId` property. Both C1 and S1 got
+  their own RED>GREEN regression Bats cases using the same break-observe-restore
+  method. Gate: `LOOM_DIFF_BASE=HEAD scripts/check` exit 0, 434/434 Bats (426
+  baseline + 8 new cases), format/lint/test all green, matching the round-0
+  independent gate rerun's method exactly. One pre-existing, unmodified signal
+  test (`INT during a mutation yields exit 130`) flaked once under heavy
+  concurrent-suite load and passed on every isolated rerun; it is untouched by
+  this pass and outside the four required changes' scope.

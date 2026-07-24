@@ -278,6 +278,22 @@ _validate_marker() {
     printf '%s\n' "$marker"
 }
 
+# _validate_run_id <run-id> — strict charset gate (alnum/underscore/hyphen
+# only; no "/", no ".") before a runId is ever used to build a filesystem
+# path (the receipt filename). runId is minted by _random_token (mktemp's
+# alnum substitution plus a trailing PID) so a well-formed run always
+# passes; this exists to fail closed (exit 3) if state.json -- same-uid
+# writable -- were ever tampered with to smuggle a path separator or a
+# parent-directory reference into that filename. Prints the validated id.
+_validate_run_id() {
+    local id="$1"
+    [ -n "$id" ] || _fail_unsafe "runId is empty"
+    case "$id" in
+    *[!A-Za-z0-9_-]*) _fail_unsafe "runId contains characters outside the allowed charset" ;;
+    esac
+    printf '%s\n' "$id"
+}
+
 _read_state() {
     local run_root="$1"
     cat -- "$(_state_path "$run_root")"
@@ -399,6 +415,36 @@ _write_inventory() {
 _diff_inventory_roots() {
     jq -nc --slurpfile a "$1" --slurpfile b "$2" \
         '(($b[0] - $a[0]) + ($a[0] - $b[0])) | map(.root) | unique | .[]' -r
+}
+
+# _verify_inventory_containment <run-root> <inventory-json> — fail closed
+# (exit 3) unless every entry of a freshly recomputed inventory is
+# physically below the already-validated run root. _inventory_root's `find`
+# never descends through a directory symlink (it lists the symlink itself
+# and stops), so the one place a quarantined run's inventory could silently
+# describe files OUTSIDE the run root is one of the five owned top-level
+# roots itself having been replaced with a symlink between validation and
+# --clean; guard that directly, then re-canonicalize every entry's parent
+# directory as defense in depth against any other escape shape.
+_verify_inventory_containment() {
+    local run_root="$1" inv="$2" label line root_label rel abs parent_canon
+    for label in claude-home codex-home project system-home tmp; do
+        if [ -L "$run_root/$label" ]; then
+            _fail_unsafe "quarantine inventory root is a symlink: $label"
+        fi
+    done
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        root_label=$(printf '%s' "$line" | jq -r '.root')
+        rel=$(printf '%s' "$line" | jq -r '.path')
+        abs="$run_root/$root_label/$rel"
+        parent_canon=$(_canon_dir "$(dirname -- "$abs")") ||
+            _fail_unsafe "quarantine inventory entry cannot be canonicalized: $root_label/$rel"
+        case "$parent_canon" in
+        "$run_root" | "$run_root"/*) ;;
+        *) _fail_unsafe "quarantine inventory entry escapes the validated run root: $root_label/$rel" ;;
+        esac
+    done < <(printf '%s' "$inv" | jq -c '.[]')
 }
 
 # ---------------------------------------------------------------------------
@@ -1614,7 +1660,7 @@ _write_evidence() {
 # ---------------------------------------------------------------------------
 
 cmd_clean() {
-    local raw="$1" run_root phase f token receipt_dir receipt path
+    local raw="$1" run_root phase f token receipt_dir receipt path run_id
 
     run_root=$(_validate_run_root "$raw") || exit 3
     _validate_marker "$run_root" >/dev/null
@@ -1651,17 +1697,27 @@ cmd_clean() {
         local inv
         inv=$(_compute_inventory "$run_root")
         printf '%s' "$inv" | jq -e '. != null' >/dev/null 2>&1 || _fail_unsafe "cannot prove a complete inventory for a quarantined run"
+        _verify_inventory_containment "$run_root" "$inv"
     fi
+
+    run_id=$(_validate_run_id "$(_state_field "$run_root" runId)") || exit 3
 
     receipt_dir="$(_git_common_dir)/loom/dogfood/receipts"
     mkdir -p "$receipt_dir" || _fail_unsafe "cannot create the untracked quarantine-receipt directory"
     receipt=$(jq -nc \
-        --arg runId "$(_state_field "$run_root" runId)" --arg marker "$(_state_field "$run_root" marker)" \
+        --arg runId "$run_id" --arg marker "$(_state_field "$run_root" marker)" \
         --arg phase "$phase" --arg now "$(_now_iso)" \
         --arg finalInventoryHash "$(_inventory_hash "$(_compute_inventory "$run_root")")" \
         --arg evidenceHash "$(_state_field "$run_root" evidenceHash)" \
         '{schema:"loom-dogfood-receipt/v1",runId:$runId,marker:$marker,finalPhase:$phase,finishedAt:$now,finalInventoryHash:$finalInventoryHash,evidenceHash:$evidenceHash}')
-    path="$receipt_dir/$(_state_field "$run_root" runId).json"
+    path="$receipt_dir/$run_id.json"
+
+    # Confirm marker ownership immediately before the recursive delete
+    # (defense against a TOCTOU tamper in the window opened by the checks
+    # above), co-located with the receipt/containment proof, not just once
+    # at function entry.
+    _validate_marker "$run_root" >/dev/null
+
     _atomic_write "$path" "$(printf '%s' "$receipt" | jq -Sc '.')"$'\n' || _fail_unsafe "cannot write the quarantine/cleanup receipt"
 
     rm -rf -- "$run_root" || _fail_unsafe "recursive cleanup failed"

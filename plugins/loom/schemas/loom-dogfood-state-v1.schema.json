@@ -6,7 +6,7 @@
   "required": ["schema", "runId", "marker", "candidate", "dryFixture", "createdAt", "updatedAt", "phase", "roots"],
   "properties": {
     "schema": { "const": "loom-dogfood-state/v1" },
-    "runId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_-]+$" },
     "marker": { "type": "string", "minLength": 16 },
     "candidate": { "type": "string", "minLength": 7 },
     "dryFixture": { "type": "boolean" },

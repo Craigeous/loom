@@ -597,3 +597,158 @@ assert_no_live_orphan() {
     [ ! -d "$RUN_ROOT" ]
     RUN_ROOT=""
 }
+
+@test "RED>GREEN: a quarantined run with an owned root swapped for an escaping symlink refuses --clean, succeeds once restored" {
+    prepare_run
+    LOOM_DOGFOOD_STUB_MODE=escape mutate claude-install claude install
+    [ "$status" -eq 3 ]
+    outside="$(mktemp -d)"
+    printf 'not owned by this run' >"$outside/intruder"
+    rm -rf "$RUN_ROOT/codex-home"
+    ln -s "$outside" "$RUN_ROOT/codex-home"
+    harness --clean "$RUN_ROOT"
+    [ "$status" -eq 3 ]
+    [[ "$output" == *"symlink"* ]]
+    [ -d "$RUN_ROOT" ]
+    [ -e "$outside/intruder" ]
+    rm -f "$RUN_ROOT/codex-home"
+    mkdir -p "$RUN_ROOT/codex-home"
+    harness --clean "$RUN_ROOT"
+    [ "$status" -eq 0 ]
+    [ ! -d "$RUN_ROOT" ]
+    rm -rf -- "$outside"
+    RUN_ROOT=""
+}
+
+@test "RED>GREEN: --clean fails closed on a tampered non-charset runId instead of building a stray receipt path" {
+    prepare_run
+    jq '.phase="failed"' "$RUN_ROOT/state.json" >"$RUN_ROOT/state.json.new"
+    mv "$RUN_ROOT/state.json.new" "$RUN_ROOT/state.json"
+    receipt_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)/loom/dogfood/receipts"
+    cp "$RUN_ROOT/state.json" "$RUN_ROOT/state.json.bak"
+    jq '.runId="../escape-runid"' "$RUN_ROOT/state.json.bak" >"$RUN_ROOT/state.json"
+    harness --clean "$RUN_ROOT"
+    [ "$status" -eq 3 ]
+    [[ "$output" == *"runId"* ]]
+    [ ! -e "$receipt_dir/../escape-runid.json" ]
+    [ -d "$RUN_ROOT" ]
+    cp "$RUN_ROOT/state.json.bak" "$RUN_ROOT/state.json"
+    harness --clean "$RUN_ROOT"
+    [ "$status" -eq 0 ]
+    [ ! -d "$RUN_ROOT" ]
+    rm -f "$receipt_dir"/*.json
+    RUN_ROOT=""
+}
+
+# ---------------------------------------------------------------------------
+# T1: previously-untested injection points (worker death before
+# native-hello; before/after:terminal; before:native-release;
+# before:supervisor-hello). Each proves no early mutation and exactly one
+# clean reconciliation.
+# ---------------------------------------------------------------------------
+
+@test "injection before:native-hello (worker dies before its own hello): supervisor's worker-hello-timeout abort and the gate-2 writer-settle path fire together; no early mutation, clean retry succeeds" {
+    prepare_run
+    LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS=2 LOOM_DOGFOOD_INJECT=before:native-hello mutate claude-install claude install
+    [ "$status" -eq 3 ]
+    [ ! -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom" ]
+    journal="$RUN_ROOT/control/journal/claude-install.1.ndjson"
+    # Exactly one abort record per attempt, with the SUPERVISOR's own
+    # timeout reason: the orchestrator's gate-2 writer-settle wait deferred
+    # to that recorded writer instead of racing it with its own fallback
+    # "no-native-hello-before-deadline" write.
+    run jq -c 'select(.type=="aborted-before-native") | .reason' "$journal"
+    [[ "$output" == *'"worker-hello-timeout"'* ]]
+    [[ "$output" != *no-native-hello-before-deadline* ]]
+    mutate claude-install claude install
+    [ "$status" -eq 0 ]
+    [ "$output" = applied ]
+}
+
+@test "injection before:supervisor-hello (supervisor dies before writing its own hello): no early mutation, exactly one clean reconciliation on retry" {
+    prepare_run
+    LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS=2 LOOM_DOGFOOD_INJECT=before:supervisor-hello mutate claude-install claude install
+    [ "$status" -eq 3 ]
+    [ ! -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom" ]
+    # The orchestrator itself -- no writer ever claimed gate-1's hello --
+    # must be the one that recognizes the deadline and records the abort.
+    journal="$RUN_ROOT/control/journal/claude-install.1.ndjson"
+    run jq -c 'select(.type=="aborted-before-native") | .reason' "$journal"
+    [[ "$output" == *'"no-supervisor-hello-before-deadline"'* ]]
+    mutate claude-install claude install
+    [ "$status" -eq 0 ]
+    [ "$output" = applied ]
+}
+
+@test "injection before:native-release (supervisor dies before granting release): the orchestrator resumes and grants the missed release exactly once; the worker -- blocked until then -- proceeds only after, and a clean retry completes" {
+    prepare_run
+    # The worker structurally blocks on the native-release record before
+    # doing anything mutating (run_worker: _wait_for_record native-release
+    # precedes exec), so the mutation cannot have happened before this
+    # single, non-duplicated release grant. The dying supervisor also
+    # leaves nobody to write "terminal", so the first call can legitimately
+    # race to either an immediate "applied" or a "quarantine" pending a
+    # second reconciling call, exactly like the supervisor-die-while-
+    # worker-continues case; only the eventual outcome is asserted here.
+    LOOM_DOGFOOD_INJECT=before:native-release mutate claude-install claude install
+    for _ in $(seq 1 40); do
+        [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0/plugin.json" ] && break
+        sleep 0.1
+    done
+    [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0/plugin.json" ]
+    journal="$RUN_ROOT/control/journal/claude-install.1.ndjson"
+    run jq -r 'select(.type=="native-release")' "$journal"
+    [ "$(printf '%s\n' "$output" | grep -c native-release)" -eq 1 ]
+    mutate claude-install claude install
+    [ "$status" -eq 0 ]
+    [ "$output" = applied ]
+    # resolved within the SAME attempt: no second attempt was ever started.
+    [ ! -e "$RUN_ROOT/control/journal/claude-install.2.ndjson" ]
+}
+
+@test "injection before:terminal (supervisor dies after full worker exit, before writing terminal): reconciles to recovered-after-apply" {
+    prepare_run
+    LOOM_DOGFOOD_INJECT=before:terminal mutate claude-install claude install
+    [ "$status" -eq 0 ]
+    [ "$output" = applied ]
+    [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0/plugin.json" ]
+    run jq -sc '[.[].type]' "$RUN_ROOT/control/journal/claude-install.1.ndjson"
+    [[ "$output" == *recovered-after-apply* ]]
+    [[ "$output" != *'"terminal"'* ]]
+}
+
+@test "injection after:terminal (supervisor dies immediately after writing terminal): applies from the durable terminal record" {
+    prepare_run
+    LOOM_DOGFOOD_INJECT=after:terminal mutate claude-install claude install
+    [ "$status" -eq 0 ]
+    [ "$output" = applied ]
+    [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0/plugin.json" ]
+    run jq -sc '[.[].type]' "$RUN_ROOT/control/journal/claude-install.1.ndjson"
+    [[ "$output" == *'"terminal","applied"]' ]]
+    [[ "$output" != *recovered-after-apply* ]]
+}
+
+# ---------------------------------------------------------------------------
+# T2: the interruption matrix is operation-agnostic, not just
+# claude-install. Parameterize one representative injection case across
+# marketplace-add, uninstall, marketplace-remove, and a codex-* opKey.
+# ---------------------------------------------------------------------------
+
+@test "injection after:supervisor-hello is operation-agnostic across marketplace-add, uninstall, marketplace-remove, and a codex opKey" {
+    prepare_run
+    for spec in \
+        "claude marketplace-add claude-marketplace-add" \
+        "claude uninstall claude-uninstall" \
+        "claude marketplace-remove claude-marketplace-remove" \
+        "codex install codex-install"; do
+        set -- $spec
+        client="$1" opkey="$2" substep="$3"
+        LOOM_DOGFOOD_INJECT=after:supervisor-hello mutate "$substep" "$client" "$opkey"
+        [ "$status" -eq 3 ]
+        token=$(jq -r 'select(.type=="intent").token' "$RUN_ROOT/control/journal/$substep.1.ndjson")
+        assert_no_live_orphan "$token"
+        mutate "$substep" "$client" "$opkey"
+        [ "$status" -eq 0 ]
+        [ "$output" = applied ]
+    done
+}
