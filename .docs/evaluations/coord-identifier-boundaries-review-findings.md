@@ -28,16 +28,23 @@ match, and diff intersection mechanically verified for all three.
 
 ## Findings
 
-- **T-F1** (tests — proposed MINOR)
-  `plugins/loom/bin/loom-coord` (`cmd_cleanup`) — a secondary user-session-id
-  call site lacks a dedicated covering negative test (the primary
-  `validate_session_id` path is covered).
-- **T-F2** (tests — proposed MINOR)
-  `plugins/loom/bin/loom-coord` (`cmd_release_claim`, `cmd_reclaim`) — slice-name
-  validation at these secondary sites lacks a dedicated covering negative.
-- **T-F3** (tests — proposed MINOR)
+- **T1** (tests — proposed MINOR)
   `plugins/loom/bin/loom-coord` (`cmd_session_bootstrap`, `cmd_session_end`) —
-  the held-claims-loop skip path lacks a dedicated covering negative.
+  the held-claims-line quarantine-skip path is untested: removing both
+  `_valid_slice_name || continue` guards keeps the full suite 82/82 green.
+- **T2** (tests — proposed MINOR)
+  `plugins/loom/bin/loom-coord` (`cmd_cleanup` `--session`) — the user-supplied
+  `validate_session_id` call site has no covering negative (`cleanup --session
+  <bad>`); the primary validate path is covered.
+- **T3** (tests — proposed MINOR)
+  `plugins/loom/bin/loom-coord` (`cmd_release_claim`, `cmd_reclaim`) —
+  `validate_slice_name` at these sites has no dedicated bad-slice-name negative
+  (all invocations use valid names).
+- **T4** (tests — proposed MINOR)
+  `plugins/loom/bin/loom-coord.bats` / plan Implementation Record — the record
+  says "17 new" NEG-ID cases; the suite actually adds 18 (64 + 18 = 82;
+  NEG-ID3 omitted from the RED→GREEN map). Documentation miscount, not a code
+  defect.
 
 ## Guards that held (no finding)
 
