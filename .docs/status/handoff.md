@@ -16,14 +16,33 @@ source of truth; `roadmap.md` is milestone order.
 
 ## Where things stand
 
-- **The macOS program amendment is the active publication checkpoint.** M0 is verified
-  and settled on remote `main` at `51b249e`. Accepted ADR 0024 and its ratification
+- **`macos-dual-client-dogfood` is complete and slice-plan-archived, pending ADR-0023
+  publication settlement — this is the next action.** Resolving code-eval PASS round 0
+  (head `a000cef`) after a bootstrap `/code-review` FAIL round 0 (dogfood-harness
+  injection-coverage gaps + cleanup hardening) was fixed and reverified green
+  (`LOOM_DIFF_BASE=HEAD scripts/check` exit 0, 434/434 Bats). Delivered: shared
+  `loom-*` workflow skills + canonical `roles/*.md` contracts with thin Claude/Codex
+  adapters; `loom-resolve-helper`; one shared `hooks.json` with policy/wire split
+  (48-case `hook-wire-v1` fixtures); `loom-launch-role`; and a fail-closed macOS
+  dogfood harness proven against real Claude 2.1.218 + Codex 0.144.6 in isolated
+  homes (full native install/reinstall/uninstall/marketplace-remove lifecycle for
+  both clients; Codex's cold role-launch leg is `infrastructure-blocked` — a live
+  `401` from a by-design credential-less isolated `CODEX_HOME`, not a product
+  defect). Private Apple-silicon dogfood-ready; **not** a public release, **not**
+  public Codex support, and does **not** reduce mandatory Linux/macOS-Intel
+  obligations. Status is `Ready to Publish` per ADR 0023 §4 — the slice claim and
+  evidence are retained until the root orchestrator runs the protected ADR-0023
+  intent/receipt/settlement sequence. **NEXT ACTION: publish this candidate**
+  (intent → non-force target update → fresh receipt → settlement), then decide the
+  next owner-directed slice.
+
+- **Prior checkpoint (settled):** the macOS program amendment. M0 is verified and
+  settled on remote `main` at `51b249e`. Accepted ADR 0024 and its ratification
   chain are integrated unchanged. The complete program/spec/instruction/docs set passed
-  cold plan evaluation round 0; both Bash lanes passed 257/257. Publish this finalized
-  docs-only candidate through ADR 0023 intent, non-force target update, fresh receipt,
-  and settlement. Then plan and implement `macos-dual-client-dogfood` for real isolated
-  Claude Code 2.1.216 + Codex CLI 0.144.6 behavior on Darwin `arm64`. Do not claim v0.2
-  release conformance; Linux and macOS Intel remain mandatory for release.
+  cold plan evaluation round 0; both Bash lanes passed 257/257. That docs-only
+  candidate published through ADR 0023 intent, non-force target update, fresh
+  receipt, and settlement — `macos-dual-client-dogfood` (above) then implemented
+  for real isolated Claude Code + Codex CLI behavior on Darwin `arm64`.
 
 - **Post-M4: CLAUDE.md Shape and Concision Discipline — COMPLETE.** Research note
   `2026-07-03-claude-md-digest-discipline.md` (Approved) → spec 08 § "Shape and Concision

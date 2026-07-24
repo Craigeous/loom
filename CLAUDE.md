@@ -39,11 +39,12 @@ after approval and change only via planning. Design decisions are in
 
 ## Map (where authoritative things live)
 
-- **`plugins/loom/`** — commands, agents, skills, hooks, and separate Claude/Codex manifests; catalogs are `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`.
+- **`plugins/loom/`** — commands/agents (thin Claude adapters), `roles/*.md` (canonical role contracts), `skills/loom-*` (shared client-neutral workflow bodies), hooks, and separate Claude/Codex manifests; catalogs are `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`.
 - **`plugins/loom/adapters/`** — the v0.2.0 compatibility matrix, installed-root bindings, and release-owned static metadata fixtures.
 - **`.docs/`** — loom's own design memory (dogfooding); not a plugin component.
-- **`plugins/loom/hooks/`** — `git-identity-guard.sh` (ADR 0003) + `precompact-write-ahead-backstop.sh` (ADR 0013 §Decision 5); auto-discovered via `hooks.json`; shell-gated.
-- **`plugins/loom/bin/loom-coord`** — multi-session coordination CLI (git-CAS lock/claim + lease renewer; on `$PATH`; ADR 0014/0015/0016).
+- **`plugins/loom/hooks/`** — `git-identity-guard.sh` (ADR 0003) + `precompact-write-ahead-backstop.sh` (ADR 0013 §Decision 5); one shared `hooks.json` for both clients (policy/wire split at the executable boundary, spec 08; 48-case `hooks/fixtures/hook-wire-v1/` Cartesian product); shell-gated.
+- **`plugins/loom/bin/`** — `loom-coord` (multi-session coordination CLI; ADR 0014/0015/0016), `loom-resolve-helper` (installed-root helper resolution, both clients), `loom-launch-role` (sole client role launcher, compatibility-matrix-driven); on `$PATH`.
+- **`scripts/macos-dual-client-dogfood`** — private Apple-silicon dual-client dogfood harness (fail-closed supervisor/worker journal); private evidence only, not public Codex support (ADR 0024).
 - **`gates/rust.md`** — Rust gate loom imposes on managed projects.
 - **`references/init-detection.md`** — Greenfield/Unaligned/Initialized classifier; all `/loom:*` run this first (M2).
 - **`references/greenfield.md`** — Greenfield init body (scaffold + seed + CLAUDE.md + gate).

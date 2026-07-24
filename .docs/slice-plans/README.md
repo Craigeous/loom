@@ -17,12 +17,24 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-- [macos-dual-client-dogfood.md](macos-dual-client-dogfood.md) — `Plan Review` —
-  implement and privately prove the shared Claude Code/Codex workflows, roles, hooks,
-  installed-root helper resolution, isolated install/reinstall, and clean uninstall
-  required by ADR 0024 on Apple silicon.
+(none)
 
 ## Archived plans
+
+- [archive/macos-dual-client-dogfood.md](archive/macos-dual-client-dogfood.md) — `Ready to
+  Publish` (pending ADR-0023 publication settlement) — implemented and privately proved the
+  shared Claude/Codex workflows and role contracts, `loom-resolve-helper` installed-root
+  resolution, the split hook-policy/wire executable behind one shared `hooks.json` (48-case
+  `hook-wire-v1` fixture Cartesian product), `loom-launch-role` (compatibility-matrix-driven
+  client launcher), and a fail-closed macOS dogfood harness (hash-chained supervisor/worker
+  journal, resume/quarantine/cleanup) on Apple silicon. Five live-run passes against real
+  Claude 2.1.218 and Codex 0.144.6 fixed five real product bugs and completed the full native
+  install/reinstall/uninstall/marketplace-remove lifecycle for both clients; the Codex cold
+  role-launch leg hit a live `401` from an isolated, credential-less `CODEX_HOME` by design and
+  is recorded honestly as `infrastructure-blocked`, not a product defect. Bootstrap review
+  (`/code-review`) FAILed round 0 on harness injection-coverage gaps and cleanup hardening;
+  fixed and resolved with a PASS sharing round 0. Private Apple-silicon dogfood-ready; not a
+  public release and not public Codex support.
 
 - [archive/macos-dogfood-program-amendment.md](archive/macos-dogfood-program-amendment.md) — `Archived` —
   accepted ADR 0024 synchronized into the improvement program, frozen specs,

@@ -6,11 +6,39 @@ The status source of truth and decision index for building loom.
 
 ## Current state
 
-- **Phase:** **Private Apple-silicon dual-client dogfood checkpoint.** M0 is settled
-  on remote `main` at `51b249e`. The documentation-only
-  `macos-dogfood-program-amendment` candidate has cold plan-evaluation PASS round 0
-  and is prospectively finalized for protected publication. The next slice after
-  settlement is `macos-dual-client-dogfood`.
+- **Phase:** **Private Apple-silicon dual-client dogfood checkpoint reached.**
+  `macos-dual-client-dogfood` is `Ready to Publish` (resolving code-eval PASS round
+  0, archived) pending the protected ADR-0023 intent/receipt/settlement sequence,
+  which the root orchestrator runs next. No further slice work is queued.
+- **Last action:** **`macos-dual-client-dogfood` slice reached `Ready to Publish`**
+  (code-eval resolving PASS round 0, head `a000cef`). Full loop: plan Approved round
+  0 → five implementation/live-run developer passes (Steps 2-10) → orchestrator-run
+  `/code-review` + `/security-review` bootstrap review FAILed round 0 on the
+  fail-closed dogfood harness's untested injection-recovery branches and quarantine
+  cleanup hardening → developer fix (6 new load-bearing Bats injection cases proven
+  by break/observe-red/restore-green, plus C1 containment + S1 `runId`-charset
+  hardening) → resolving code-eval PASS round 0 (`LOOM_DIFF_BASE=HEAD scripts/check`
+  exit 0, 434/434 Bats). Delivered: shared `loom-*` Agent Skill workflow bodies +
+  canonical `roles/*.md` contracts with thin Claude/Codex adapters; `loom-resolve-
+  helper` (installed-root helper resolution for both clients); one shared
+  `hooks.json` with policy/wire split at the executable boundary (48-case
+  `hook-wire-v1` fixture Cartesian product); `loom-launch-role` (sole,
+  compatibility-matrix-driven client role launcher); and a fail-closed macOS dogfood
+  harness (hash-chained supervisor/worker journal; prepare/exercise/uninstall/clean;
+  resume/quarantine/cleanup reconciliation). **Live evidence** (five real-run
+  attempts against Claude 2.1.218 and Codex 0.144.6, isolated homes) fixed five real
+  product bugs found only at real scale and completed the full native
+  marketplace-add/install/reinstall/uninstall/marketplace-remove lifecycle for both
+  clients, plus a successful Claude cold role launch. The Codex cold role-launch leg
+  hit a live `401 Unauthorized` from the isolated, credential-less `CODEX_HOME` by
+  design (never seeded from the owner's real credentials) — recorded honestly as
+  `infrastructure-blocked`, not a product defect, in
+  `.docs/evaluations/macos-dual-client-dogfood-evidence.json`. This slice makes loom
+  **privately Apple-silicon dual-client dogfood-ready**; it is **not** a public
+  release, does **not** claim public Codex support, and does **not** reduce the
+  mandatory Linux/macOS-Intel v0.2 release obligations. Per ADR 0023 §4 the slice
+  advances to `Ready to Publish`, not `Landed`, until fresh remote verification and
+  receipt.
 - **Last action:** accepted ADR 0024 was integrated without rewriting; the improvement
   plan, spec index and eight frozen specs, canonical project instructions, CLAUDE/AGENTS
   adapters, README, and indexes were synchronized. The exact `ee37a20` review candidate

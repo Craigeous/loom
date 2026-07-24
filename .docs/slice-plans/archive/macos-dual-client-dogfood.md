@@ -1,6 +1,6 @@
 # Apple-silicon Claude Code + Codex dogfood
 
-Status: Implemented
+Status: Ready to Publish
 Target specs: [02-roles.md](../spec/02-roles.md),
 [06-init-modes.md](../spec/06-init-modes.md),
 [07-command-surface.md](../spec/07-command-surface.md),
@@ -598,3 +598,12 @@ client transcripts, guarded dogfood cleanup receipts below
   test (`INT during a mutation yields exit 130`) flaked once under heavy
   concurrent-suite load and passed on every isolated rerun; it is untouched by
   this pass and outside the four required changes' scope.
+- 2026-07-24 (finalize): resolving code-eval PASS on head `a000cef` (round 0,
+  shares Round 0 per the FAIL-only counting rule). Per ADR 0023 §4 the slice
+  advances to `Ready to Publish`, not `Landed` — the claim and evidence are
+  retained pending the protected ADR-0023 intent/receipt/settlement sequence,
+  which the root orchestrator runs after this finalize pass. The plan is
+  archived now (spec 03: "the candidate may contain prospective
+  `Landed`/`Archived` text so the final status and code arrive in one target
+  update"); that text has no operational authority until fresh remote
+  verification succeeds.

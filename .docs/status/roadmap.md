@@ -11,13 +11,18 @@ Milestone order for building loom. "What's next and why"; detailed status in
   four-cell hosted CI, and static Claude Code/Codex compatibility contracts.
 - [x] `macos-dogfood-program-amendment` — synchronize the accepted macOS-first
   authority into the improvement plan, frozen specs, indexes, and instruction digest.
-- [ ] `macos-dual-client-dogfood` — prove real clean install/reinstall, discovery,
-  workflows, roles, hooks/trust, helper-root behavior, and uninstall on Apple silicon.
+- [x] `macos-dual-client-dogfood` — proved real clean install/reinstall, discovery,
+  workflows, roles, hooks/trust, helper-root behavior, and uninstall on Apple silicon
+  for Claude Code 2.1.218 and Codex CLI 0.144.6 (Codex's cold role-launch leg is
+  `infrastructure-blocked` by a by-design credential-less isolated `CODEX_HOME`, not
+  a product defect).
 
-M0 is authoritative at settled remote result `51b249e`. The program-amendment checkbox
-is prospective until its configured remote target and protected transition settlement
-verify the exact publication candidate. ADR 0019's Ubuntu and both macOS architecture
-release matrix remains unchanged; the private code-bearing dogfood slice is next.
+M0 is authoritative at settled remote result `51b249e`. Both the program-amendment and
+`macos-dual-client-dogfood` checkboxes are prospective until each candidate's
+configured remote target and protected transition settlement verify the exact
+publication. ADR 0019's Ubuntu and both macOS architecture release matrix remains
+unchanged and mandatory; this checkpoint is a private Apple-silicon dogfood milestone
+only, not a public release or public Codex support.
 
 ## M0 — Design (complete)
 
