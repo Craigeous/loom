@@ -46,6 +46,20 @@ case "$0" in
 esac
 
 INTERPRETER="${BASH:-/bin/bash}"
+# _STAT_FLAVOR — probed once: BSD/macOS `stat -f FORMAT FILE` (the `-f`
+# flag selects a format string) vs. GNU/Linux `stat -f FILE` (the `-f`
+# flag means "filesystem status", not format -- GNU spells per-file format
+# as `stat -c FORMAT FILE`). Passing BSD's `-f FORMAT` verbatim to GNU stat
+# does not fail closed: GNU treats the format string itself as a FILE
+# operand, prints filesystem statistics (including live free-block counts)
+# to stdout, and only fails on the literal nonexistent "FORMAT" operand --
+# polluting every caller's captured output instead of erroring cleanly.
+# Probed against this script's own path, which always exists.
+if stat -f '%z' -- "$0" >/dev/null 2>&1; then
+    _STAT_FLAVOR=bsd
+else
+    _STAT_FLAVOR=gnu
+fi
 MAX_ATTEMPTS=5
 DEFAULT_HANDSHAKE_TIMEOUT=20
 POLL_INTERVAL=0.05
@@ -359,8 +373,13 @@ _inventory_root() {
             else
                 kind="other"
             fi
-            mode=$(stat -f '%Lp' -- "$path" 2>/dev/null || printf '000')
-            size=$(stat -f '%z' -- "$path" 2>/dev/null || printf '0')
+            if [ "$_STAT_FLAVOR" = bsd ]; then
+                mode=$(stat -f '%Lp' -- "$path" 2>/dev/null || printf '000')
+                size=$(stat -f '%z' -- "$path" 2>/dev/null || printf '0')
+            else
+                mode=$(stat -c '%a' -- "$path" 2>/dev/null || printf '000')
+                size=$(stat -c '%s' -- "$path" 2>/dev/null || printf '0')
+            fi
             hash=""
             [ "$kind" = file ] && hash=$(_sha256_file "$path")
             jq -nc --arg root "$label" --arg rel "${rel#./}" --arg type "$kind" \
