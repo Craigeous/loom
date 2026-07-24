@@ -1,6 +1,6 @@
 # Governance: reconcile program authority, record, and reality after M0
 
-Status: Draft
+Status: Plan Review
 Target specs: [03-artifact-lifecycle.md](../spec/03-artifact-lifecycle.md),
 [04-orchestrator.md](../spec/04-orchestrator.md),
 [05-blind-evaluation.md](../spec/05-blind-evaluation.md)
