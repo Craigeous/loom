@@ -1552,7 +1552,11 @@ cmd_uninstall() {
         _write_state "$run_root" '.phase="failed"'
         _fail_residue "residue remains under claude-home/plugins after uninstall (loom still registered)"
     fi
-    if [ -e "$run_root/codex-home/plugins" ] && [ -n "$(find "$run_root/codex-home/plugins" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+    # Codex's `plugin remove` can leave now-empty ancestor directories
+    # (cache/loom, cache/loom/loom) behind after deleting the version
+    # directory itself. Only a leftover FILE or symlink is genuine residue;
+    # a bare empty directory chain identifies nothing.
+    if [ -e "$run_root/codex-home/plugins" ] && [ -n "$(find "$run_root/codex-home/plugins" -mindepth 1 \( -type f -o -type l \) -print -quit 2>/dev/null)" ]; then
         _write_state "$run_root" '.phase="failed"'
         _fail_residue "residue remains under codex-home/plugins after uninstall"
     fi

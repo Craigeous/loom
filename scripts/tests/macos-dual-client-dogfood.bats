@@ -316,6 +316,30 @@ mutate_direct() { "$LOOM_TEST_BASH" "$HARNESS" __mutation "$RUN_ROOT" "$@"; }
     [ "$status" -eq 6 ]
 }
 
+@test "RED>GREEN: a bare empty ancestor directory left under codex-home/plugins is not residue" {
+    prepare_run
+    harness --exercise "$RUN_ROOT"
+    [ "$status" -eq 0 ]
+    mutate claude-uninstall claude uninstall
+    [ "$status" -eq 0 ]
+    mutate claude-marketplace-remove claude marketplace-remove
+    [ "$status" -eq 0 ]
+    mutate codex-uninstall codex uninstall
+    [ "$status" -eq 0 ]
+    mutate codex-marketplace-remove codex marketplace-remove
+    [ "$status" -eq 0 ]
+    # Every substep above is now already "applied": the imminent
+    # --uninstall call short-circuits all four mutations instantly and
+    # falls straight through to the residue check. Recreate Codex's real
+    # confirmed leftover shape (empty ancestor directories left behind
+    # after its version directory is deleted) right before that check runs.
+    mkdir -p "$RUN_ROOT/codex-home/plugins/cache/loom/loom"
+    harness --uninstall "$RUN_ROOT"
+    [ "$status" -eq 0 ]
+    run jq -r .phase "$RUN_ROOT/state.json"
+    [ "$output" = complete ]
+}
+
 @test "an unmet postcondition with a clean exit is a product failure (exit 5), not a false success" {
     prepare_run
     LOOM_DOGFOOD_STUB_MODE=no-postcondition mutate claude-install claude install
