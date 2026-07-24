@@ -17,8 +17,15 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-_None in flight._ (The `governance-baseline-reconciliation` plan landed and is now
-under Archived plans below.)
+- [coord-identifier-boundaries.md](coord-identifier-boundaries.md) — `Plan Review` —
+  M1 coordinator-safety slice: add centralized identifier validation (session ids,
+  slice names, PIDs; grammar `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`, no `/`, `..`,
+  whitespace, control bytes, Unicode separators) to `plugins/loom/bin/loom-coord`,
+  validate session ids decoded from claim blobs before path use, replace `rm -rf` of
+  computed session dirs with known-file deletion + `rmdir`, and quarantine malformed
+  persisted state so no identifier can escape `.git/loom`. Code-bearing ADR 0023 §1
+  bootstrap slice (sealed-package review at `Implemented`). Path boundary:
+  `loom-coord` + its bats + these `.docs` lifecycle files only.
 
 ## Archived plans
 
