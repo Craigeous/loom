@@ -611,10 +611,25 @@ _allowed_root_labels() {
     printf '%s' "$fixture" | jq -c --arg c "$client" '.allowedRoots[$c] // []'
 }
 
+# _postcondition_label <opKey> [client] — real Claude 2.1.218 `plugin
+# uninstall` was confirmed (live run) to ORPHAN the cache directory rather
+# than delete it (it drops the "loom" key from installed_plugins.json and
+# stamps a .orphaned_at marker, but leaves every file in place); real Codex
+# 0.144.6 `plugin remove` was confirmed to delete the version directory
+# outright. "Discovery" (plan Step 9 / Verification 8) tracks each client's
+# own installed-registry truth, not raw byte presence in a client-managed
+# cache it may legitimately retain.
 _postcondition_label() {
-    case "$1" in
+    local opkey="$1" client="${2:-}"
+    case "$opkey" in
     install) printf 'cache-present\n' ;;
-    uninstall) printf 'cache-absent\n' ;;
+    uninstall)
+        if [ "$client" = claude ]; then
+            printf 'not-registered\n'
+        else
+            printf 'cache-absent\n'
+        fi
+        ;;
     # marketplace-add/remove only register/deregister the marketplace; they
     # never create or remove the installed plugin cache, so no cache-layout
     # postcondition applies (native exit + allowed-root-only diff still are).
@@ -623,15 +638,24 @@ _postcondition_label() {
 }
 
 _check_postcondition() {
-    local run_root="$1" client="$2" opkey="$3" label cache_path fixture
-    label=$(_postcondition_label "$opkey")
+    local run_root="$1" client="$2" opkey="$3" label cache_path fixture registry
+    label=$(_postcondition_label "$opkey" "$client")
     [ "$label" = none ] && return 0
-    fixture=$(_load_fixture)
-    cache_path=$(printf '%s' "$fixture" | jq -r --arg c "$client" '.cacheLayout[$c]')
-    cache_path=${cache_path//\$RUN_ROOT/$run_root}
     case "$label" in
-    cache-present) [ -e "$cache_path" ] ;;
-    cache-absent) [ ! -e "$cache_path" ] ;;
+    cache-present | cache-absent)
+        fixture=$(_load_fixture)
+        cache_path=$(printf '%s' "$fixture" | jq -r --arg c "$client" '.cacheLayout[$c]')
+        cache_path=${cache_path//\$RUN_ROOT/$run_root}
+        case "$label" in
+        cache-present) [ -e "$cache_path" ] ;;
+        cache-absent) [ ! -e "$cache_path" ] ;;
+        esac
+        ;;
+    not-registered)
+        registry="$run_root/claude-home/plugins/installed_plugins.json"
+        [ -f "$registry" ] || return 0
+        ! jq -e '.plugins.loom' "$registry" >/dev/null 2>&1
+        ;;
     esac
 }
 
@@ -845,7 +869,7 @@ _start_attempt() {
     _append_journal_records "$journal" \
         "$(jq -nc --arg type intent --arg token "$token" --arg client "$client" --arg opKey "$opkey" \
             --arg argvHash "$argv_hash" --arg pre "$pre_hash" --argjson deadline "$deadline" \
-            --argjson allowedRoots "$allowed" --arg postcondition "$(_postcondition_label "$opkey")" \
+            --argjson allowedRoots "$allowed" --arg postcondition "$(_postcondition_label "$opkey" "$client")" \
             '{type:$type,token:$token,client:$client,opKey:$opKey,argvHash:$argvHash,preInventoryHash:$pre,handshakeDeadline:$deadline,allowedRoots:$allowedRoots,postcondition:$postcondition}')"
     _inject "after:intent"
 
@@ -1515,17 +1539,23 @@ cmd_uninstall() {
     done
 
     # Zero-discovery/residue check: distinct from (and broader than) each
-    # uninstall mutation's own cache-absent postcondition -- nothing at all
-    # may remain under either client's owned plugins/ tree once both the
-    # uninstall and the marketplace-remove mutations report success.
-    local label plugins_root
-    for label in claude-home codex-home; do
-        plugins_root="$run_root/$label/plugins"
-        if [ -e "$plugins_root" ] && [ -n "$(find "$plugins_root" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-            _write_state "$run_root" '.phase="failed"'
-            _fail_residue "residue remains under $label/plugins after uninstall"
-        fi
-    done
+    # uninstall mutation's own postcondition. Codex 0.144.6 `plugin remove`
+    # was confirmed (live run) to delete its version directory outright, so
+    # its plugins/ tree is checked byte-for-byte. Claude 2.1.218 `plugin
+    # uninstall` was confirmed to ORPHAN the cache (files remain, only
+    # installed_plugins.json and a .orphaned_at marker change), so "zero
+    # discovery" for Claude means the client no longer registers loom as
+    # installed, not that its plugins/ tree is empty.
+    local registry
+    registry="$run_root/claude-home/plugins/installed_plugins.json"
+    if [ -f "$registry" ] && jq -e '.plugins.loom' "$registry" >/dev/null 2>&1; then
+        _write_state "$run_root" '.phase="failed"'
+        _fail_residue "residue remains under claude-home/plugins after uninstall (loom still registered)"
+    fi
+    if [ -e "$run_root/codex-home/plugins" ] && [ -n "$(find "$run_root/codex-home/plugins" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+        _write_state "$run_root" '.phase="failed"'
+        _fail_residue "residue remains under codex-home/plugins after uninstall"
+    fi
 
     _write_state "$run_root" '.phase="complete"'
     _write_evidence "$run_root"

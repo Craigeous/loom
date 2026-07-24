@@ -285,6 +285,22 @@ mutate_direct() { "$LOOM_TEST_BASH" "$HARNESS" __mutation "$RUN_ROOT" "$@"; }
     done
 }
 
+@test "RED>GREEN: claude uninstall postcondition reads installed_plugins.json, not raw cache presence" {
+    prepare_run
+    # Real Claude 2.1.218 (confirmed live) ORPHANS the plugin cache on
+    # uninstall rather than deleting it: files remain, only
+    # installed_plugins.json loses the "loom" key. Simulate that outcome
+    # directly (stub does nothing under no-postcondition mode).
+    cache_dir="$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0"
+    mkdir -p "$cache_dir" "$RUN_ROOT/claude-home/plugins"
+    : >"$cache_dir/plugin.json"
+    jq -n '{version:2,plugins:{}}' >"$RUN_ROOT/claude-home/plugins/installed_plugins.json"
+    LOOM_DOGFOOD_STUB_MODE=no-postcondition mutate claude-uninstall claude uninstall
+    [ "$status" -eq 0 ]
+    [ "$output" = applied ]
+    [ -e "$cache_dir" ]
+}
+
 @test "RED>GREEN: handshake deadline is computed after the pre-inventory walk, not before it" {
     prepare_run
     LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS=2 LOOM_DOGFOOD_TEST_INVENTORY_SLEEP=3 mutate claude-install claude install
