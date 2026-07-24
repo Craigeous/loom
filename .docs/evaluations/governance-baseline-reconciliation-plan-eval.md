@@ -95,3 +95,49 @@ commits `c7bd84d`, `a3cb007`, `44f16a4` exist and the `c7bd84d..a3cb007` range i
 non-empty (69 commits, of which the plan cites a 13-commit identity-violation
 subset) — so the errata items 2/4/5 are sound in substance; the blockers are
 confined to item 1.
+
+---
+
+# Re-evaluation (round 0 resolution)
+
+Verdict: PASS
+Round: 0
+Reviewed against: ADR 0023 (§1 closed-list, §6 transition rules, §7), ADR 0024;
+spec 03 lifecycle; plan-eval + severity rubrics. Facts re-checked mechanically
+against the object DB at commit 9f9365b (diff since prior reviewed tip 2c45f84).
+
+## Resolution of prior findings
+
+- [BLOCKER] Retiring `client-floor-adapter-smoke` without an accepted ADR —
+  RESOLVED. The retirement item is removed. The revision records only the
+  observation and routes the decision as an explicit owner question under
+  Notes → "Deferred to ADR-level decision." No spec "retired" glosses; the slice
+  enacts nothing on authority.
+- [BLOCKER] Transition-state mutation not executable / omits §6 controls —
+  RESOLVED. No transition-state write remains. The path boundary explicitly
+  excludes "transition-state / `state.json` mutation, and … remote-ref
+  operations." Verified: no successor push is described anywhere in the revision.
+- [MAJOR] Not single-purpose — RESOLVED. The protected-ref mutation and the two
+  frozen-spec amendments (former items 1 and 3) are gone; all three surviving
+  items are living-doc record-keeping. One coherent goal.
+- [MAJOR] Verification incomplete — RESOLVED. Each of the three items now carries
+  a named mechanical check (git grep presence assertions, the 13-of-69 identity
+  count command, the branch-existence and reference-scan probes), plus the gate.
+  Item↔verification numbering is aligned.
+- [MINOR] Path boundary framed only as filesystem paths — RESOLVED. Remote-ref
+  operations are explicitly out of scope; PR closes and branch deletes are
+  recorded as already-performed facts, not slice actions.
+- [MINOR] Owner-gate "unreferenced" test not mechanical — RESOLVED. Item 3 names
+  `git grep -n bootstrap-authority-b28a747 .docs/` plus a `state.json` history
+  scan and the `git ls-remote` existence probe.
+
+## Fresh findings
+
+None. Re-verified the revision's load-bearing facts against the tree: identity
+violations in `c7bd84d..a3cb007` = 13 (5 `loom-recorder@invalid` + 4 `loom@local`
++ 4 `loom@localhost`); range = 69 commits; `44f16a4` is a merge commit;
+`c7bd84d`/`a3cb007` exist; `loom/bootstrap-authority-b28a747` still on origin at
+`b28a747…`. Target docs and `scripts/check` gate all exist. Authority is ADRs
+0023/0024 with no spec edits — appropriate for a docs-only governance record and
+consistent with the prior eval's own note that such changes go through the normal
+plan-evaluator lifecycle. No blockers, no majors.
