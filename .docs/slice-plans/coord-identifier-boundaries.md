@@ -1,6 +1,6 @@
 # coord-identifier-boundaries
 
-Status: In Progress
+Status: Implemented
 Target specs: none (coordinator-safety code slice; no frozen-spec edits)
 Authority: [repository improvement plan](../repository-improvement-plan.md) § "M1 —
 Fix coordinator safety" → `### Slice: coord-identifier-boundaries`;
@@ -362,3 +362,18 @@ pass under both lanes.
   at `Implemented` the orchestrator runs the §3 three cold auxiliary finders and the §4
   independent evaluator against the exact committed `base..head`; the evaluator owns the
   PASS/FAIL. This plan does not itself constitute that review.
+- **Implementation record.** Steps 1–9 implemented exactly as specified — the two-grammar
+  split (`_valid_identifier` for session ids / decoded-blob sids / PIDs;
+  `_valid_slice_name` for slice names), all Step 4–8 call sites, and `_remove_session_dir`
+  replacing every `rm -rf` of a computed session dir (`grep -n 'rm -rf'` confirms the only
+  remaining hits are a comment and a stale in-code note, no live call). Added 17 new
+  `NEG-ID*` bats cases plus the plan-authorized T3 expectation flip. Gate:
+  `LOOM_DIFF_BASE=c899673 scripts/check` → **All checks passed** (452/452 Bats, including
+  82/82 in `loom-coord.bats`: 64 pre-existing unchanged + T3 flipped + 17 new). RED→GREEN
+  proven per guard by temporarily neutering each predicate/call site and confirming the
+  exact mapped negative(s) fail, then restoring (diffed byte-identical to committed state)
+  and reconfirming green: `_valid_identifier` (NEG-ID1/2/3b/4/4b/5/5b/6/6b + `T3`),
+  `_valid_slice_name` (NEG-ID7/7b/7c; NEG-ID7d/7e correctly stayed green), `validate_pid`
+  (NEG-ID8), and `_remove_session_dir`'s rmdir-quarantine vs `rm -rf` (NEG-ID9b; NEG-ID9
+  correctly stayed green either way). No deviation from the plan's steps or verification
+  mapping.
