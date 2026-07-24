@@ -121,3 +121,58 @@ The plan is close: the design, containment, and session-id/decoded-sid coverage 
 solid. The single structural defect is treating slice names as path identifiers when
 the tree already renders them path-safe by hashing — that over-restriction is what
 breaks the suite and conflicts with V5/V6.
+
+---
+
+# Evaluation: coord-identifier-boundaries (slice-plan) — re-review
+
+Verdict: PASS
+Round: 0
+Reviewed against: repository-improvement-plan.md § "M1 — Fix coordinator safety"
+→ `### Slice: coord-identifier-boundaries`; ADR 0023 §1/§3/§4; the real
+`plugins/loom/bin/loom-coord` and `plugins/loom/bin/loom-coord.bats`; `git diff
+e8f635b..4c225dd` on the plan.
+
+## Findings
+
+All four round-0 required changes are genuinely resolved. No BLOCKER/MAJOR remain.
+
+- [RESOLVED, was BLOCKER] **Slice-name over-restriction / false "suite passes
+  unchanged" claim.** The diff introduces a separate narrow predicate
+  `_valid_slice_name` (Step 1: non-empty + `*[[:cntrl:]]*` reject only) and routes
+  `validate_slice_name` (Step 2), the Step 5 entry-point guards, and the Step 7
+  held-claims-line guard through it — not `_valid_identifier`. Verified mechanically
+  against the suite: SC1 (`claim "slice:foo"`, bats 1299) and V5b (`claim "a..b"`,
+  bats 1740) contain only printable bytes, so both pass `_valid_slice_name` and stay
+  green; likewise `foo.lock` (V5a), `Auth`/`auth` (V6), `v2`, and every `slice-*`
+  literal. No slice-name literal in the suite contains a control byte, so the narrow
+  predicate rejects none of them. The "passes unchanged except T3" claim is now
+  mechanically true.
+- [RESOLVED, was BLOCKER] **V5/V6 capability removal + Step-7 stranding hazard.**
+  Step 7 now uses `_valid_slice_name` for the `cmd_session_end` /
+  `cmd_session_bootstrap` held-claims iteration, with the load-bearing note that a
+  legitimately-held `:`/`..` name stays claimed and is re-issued/released normally;
+  only byte-corrupt lines are skipped. This removes the stranding hazard the round-0
+  eval flagged and preserves the tested V5/V6 freeform-slice capability.
+- [RESOLVED, was MINOR] **Threat-model example.** Context bullet 1 now reads
+  `x/../../victim` → `.git/victim`, and explicitly notes a bare `../../victim` stays
+  inside `loom` — matching regression case 1. Correct.
+- [RESOLVED, was MINOR] **Checkpoint-arguments bullet.** A new Notes bullet
+  dispositions the M1 "Checkpoint arguments where applicable" item: `EXTRA_ARGS` is
+  free-form content written to a path derived from the already-validated
+  `SESSION_ID`, forming no path/ref/process id — hence out of validation scope,
+  visibly discharged.
+
+## Notes
+
+Fresh check of the narrow slice-name predicate for new inconsistency against the M1
+contract: none found. Decoded-blob-sid consumers still use the strict
+`_valid_identifier` grammar (the two grammars are correctly split by whether the
+value forms a path/ref/process arg vs. is hash/base64-consumed). Spot-checked the
+decoded-sid sweep tests (U2/U6 `ses-peer-U2`/`ses-u6-live`, R1/R2/R3/RCL peer sids)
+— all are valid identifiers, and U6's empty-ts row is caught by the pre-existing
+ts guard before the new sid guard, so no cleanup/reclaim sweep expectation flips.
+Only T3's `foo\nbar` decoded sid (backslash, outside the grammar) flips to
+quarantine, which Step 9 authorizes. `[[:cntrl:]]` in a `case` glob is POSIX / Bash
+3.2 safe. The previously-confirmed session-id / decoded-sid / PID /
+`_remove_session_dir` scope is unchanged. Plan is executable as written.
