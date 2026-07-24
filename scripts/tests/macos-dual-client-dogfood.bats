@@ -110,7 +110,7 @@ EOF
 
 setup() {
     make_stub_client
-    export LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS=2
+    export LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS=6
     unset LOOM_DOGFOOD_INJECT LOOM_DOGFOOD_STUB_MODE LOOM_DOGFOOD_SPAWN_ORPHAN LOOM_DOGFOOD_STUB_SLEEP
     RUN_ROOT=""
     ORPHAN_PIDS=()
@@ -263,6 +263,26 @@ mutate_direct() { "$LOOM_TEST_BASH" "$HARNESS" __mutation "$RUN_ROOT" "$@"; }
     ls "$receipt_dir"/*.json >/dev/null
     rm -f "$receipt_dir"/*.json
     RUN_ROOT=""
+}
+
+@test "exercise captures list/discovery, helper-root, and role/hook probes for both clients" {
+    prepare_run
+    harness --exercise "$RUN_ROOT"
+    [ "$status" -eq 0 ]
+    [ -f "$RUN_ROOT/control/probes.ndjson" ]
+    for c in claude codex; do
+        for k in role-launch hook-trust list-project list-outside helper-root; do
+            run jq -c --arg k "$c-$k" 'select(.key==$k)' "$RUN_ROOT/control/probes.ndjson"
+            [ "$status" -eq 0 ]
+            [ -n "$output" ]
+        done
+        [ -f "$RUN_ROOT/control/output/$c-list-project.stdout" ]
+        [ -f "$RUN_ROOT/control/output/$c-list-outside.stdout" ]
+        run cat "$RUN_ROOT/control/output/$c-list-project.stdout"
+        [[ "$output" == *'"name":"loom"'* ]]
+        run cat "$RUN_ROOT/control/output/$c-list-outside.stdout"
+        [[ "$output" == *'"name":"loom"'* ]]
+    done
 }
 
 @test "residue after uninstall is refused (exit 6)" {

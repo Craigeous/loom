@@ -1320,6 +1320,80 @@ _probe_hook_trust() {
     printf 'observed\n%s\n' "$status"
 }
 
+# _probe_list <run-root> <client> <label: project|outside> — a direct
+# (non-mutating) invocation of the client's pinned "list" op, through the
+# same fixture-driven env redirect as every native mutation, from a
+# specific cwd. Realizes plan Step 9's "list/discovery" and "one explicit
+# read-only workflow inside and outside the project": running the identical
+# op from inside vs. outside the project root proves loom's user-scope
+# discovery does not depend on invocation location (Verification 8:
+# "identical intended project root inside/outside"). Never gated behind the
+# mutation handshake: read-only, no postcondition, no allowed-root diff risk.
+_probe_list() {
+    local run_root="$1" client="$2" label="$3" client_bin cwd out_dir stdout_path stderr_path status hash
+    local -a client_args env_args
+    client_bin=$(_client_bin "$run_root" "$client")
+    [ -n "$client_bin" ] || {
+        printf 'no-client-bin\n0\n'
+        return
+    }
+    case "$label" in
+    project) cwd="$run_root/project" ;;
+    *) cwd="$run_root" ;;
+    esac
+    client_args=()
+    while IFS= read -r arg; do client_args+=("$arg"); done < <(_client_argv "$client" list "$run_root")
+    env_args=()
+    while IFS= read -r kv; do env_args+=("$kv"); done < <(_client_env_args "$client" "$run_root")
+    out_dir="$run_root/control/output"
+    mkdir -p "$out_dir"
+    stdout_path="$out_dir/$client-list-$label.stdout"
+    stderr_path="$out_dir/$client-list-$label.stderr"
+    (CDPATH='' cd -- "$cwd" 2>/dev/null && exec env "${env_args[@]}" "$client_bin" "${client_args[@]}") >"$stdout_path" 2>"$stderr_path"
+    status=$?
+    hash=$(_sha256_file "$stdout_path" 2>/dev/null || printf '')
+    printf '%s\n%s\n' "$hash" "$status"
+}
+
+# _probe_helper_root <run-root> <client> — proves loom-resolve-helper
+# resolves against the REAL installed cache root (not the source tree):
+# Claude via CLAUDE_PLUGIN_ROOT=<cacheLayout>, Codex via an absolute skill
+# source under <cacheLayout>/skills/loom-playbook/SKILL.md (the one skill
+# the Codex baseline confirmed installed). Read-only; never gated by the
+# mutation handshake.
+_probe_helper_root() {
+    local run_root="$1" client="$2" helper fixture cache out status hash
+    helper="$REPO_ROOT/plugins/loom/bin/loom-resolve-helper"
+    [ -x "$helper" ] || {
+        printf 'no-resolve-helper\n0\n'
+        return
+    }
+    fixture=$(_load_fixture)
+    cache=$(printf '%s' "$fixture" | jq -r --arg c "$client" '.cacheLayout[$c]')
+    cache=${cache//\$RUN_ROOT/$run_root}
+    if [ "$client" = codex ]; then
+        out=$(env -u CLAUDE_PLUGIN_ROOT -u PLUGIN_ROOT "$helper" codex "$cache/skills/loom-playbook/SKILL.md" loom-coord 2>&1)
+    else
+        out=$(CLAUDE_PLUGIN_ROOT="$cache" "$helper" claude loom-coord 2>&1)
+    fi
+    status=$?
+    hash=$(_sha256_str "$out")
+    printf '%s\n%s\n' "$hash" "$status"
+}
+
+# _capture_probe <run-root> <key> <"hash\nexit" two-line probe output> —
+# appends one compact JSON record to control/probes.ndjson so the developer
+# evidence-assembly step (which never re-executes a client) can bind every
+# probe's real hash/exit into the published loom-dogfood-evidence/v1 file.
+_capture_probe() {
+    local run_root="$1" key="$2" data="$3" hash status
+    hash=$(printf '%s' "$data" | sed -n '1p')
+    status=$(printf '%s' "$data" | sed -n '2p')
+    case "$status" in '' | *[!0-9]*) status=0 ;; esac
+    jq -nc --arg key "$key" --arg hash "$hash" --argjson exit "$status" \
+        '{key:$key,outputHash:$hash,exit:$exit}' >>"$run_root/control/probes.ndjson"
+}
+
 # ---------------------------------------------------------------------------
 # --exercise / --uninstall / --clean
 # ---------------------------------------------------------------------------
@@ -1376,8 +1450,11 @@ cmd_exercise() {
 
     for client in claude codex; do
         _run_client_sequence "$run_root" "$client"
-        _probe_role_launch "$run_root" "$client" >/dev/null
-        _probe_hook_trust "$client" >/dev/null
+        _capture_probe "$run_root" "$client-role-launch" "$(_probe_role_launch "$run_root" "$client")"
+        _capture_probe "$run_root" "$client-hook-trust" "$(_probe_hook_trust "$client")"
+        _capture_probe "$run_root" "$client-list-project" "$(_probe_list "$run_root" "$client" project)"
+        _capture_probe "$run_root" "$client-list-outside" "$(_probe_list "$run_root" "$client" outside)"
+        _capture_probe "$run_root" "$client-helper-root" "$(_probe_helper_root "$run_root" "$client")"
     done
 
     _write_state "$run_root" '.phase="exercised"'
