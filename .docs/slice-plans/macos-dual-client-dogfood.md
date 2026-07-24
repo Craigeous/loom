@@ -1,6 +1,6 @@
 # Apple-silicon Claude Code + Codex dogfood
 
-Status: In Progress
+Status: Implemented
 Target specs: [02-roles.md](../spec/02-roles.md),
 [06-init-modes.md](../spec/06-init-modes.md),
 [07-command-surface.md](../spec/07-command-surface.md),
@@ -505,3 +505,54 @@ client transcripts, guarded dogfood cleanup receipts below
   installed Claude/Codex binaries (Verification 7/8), the three cold advisory
   finders + code-evaluator routing (Step 11), and archival (Step 12) -- Status stays
   `In Progress`.
+- 2026-07-24 (pass 5, Steps 9-10, live run): five real-run attempts against Claude
+  2.1.218 (exceeds the 2.1.216 floor) and Codex 0.144.6, each isolated via
+  HOME/CLAUDE_CONFIG_DIR/CODEX_HOME/TMPDIR redirection, surfaced five real product
+  bugs the dry-fixture suite could not reach at real scale; each was fixed minimally,
+  covered by a RED>GREEN Bats case (one deliberately relies on the real dogfood
+  re-run itself as the scale proof -- documented at its commit -- since faithfully
+  reproducing thousands of real hashed files in-suite was judged not worth the
+  gate-time cost), and the run was re-driven fresh from a clean `--prepare` each
+  time (never resumed a half-mutated attempt): (1) `_probe_role_launch`'s Codex
+  branch exec'd the real `codex` binary without the fixture's env redirect,
+  silently reaching the owner's real `CODEX_HOME` (confirmed via file-timestamp
+  diff, not just code reading) -- fixed to inherit the same env-arg redirection
+  every native mutation already uses; (2) the fixture's `cacheLayout.claude` pinned
+  an unversioned path but real Claude nests its cache by version exactly like
+  Codex (`.../loom/loom/0.2.0/...`) -- corrected the fixture and the dry-fixture
+  stub/assertions that had baked in the stale path; (3) `_start_attempt` computed
+  the handshake deadline BEFORE `_compute_inventory`'s full-tree SHA-256 walk,
+  so a real installed tree could make that walk outlast the deadline itself,
+  producing an immediate spurious self-timeout -- moved the deadline computation
+  to immediately before the intent write; (4) `_diff_inventory_roots` passed whole
+  inventories through `jq --argjson`, which overflowed the OS argv limit
+  ("Argument list too long") once a real installed tree (with each client's
+  marketplace `.git` clone) pushed the inventory past roughly 6-7k entries --
+  switched to `--slurpfile` over the already-written inventory files; (5) real
+  Claude 2.1.218 `plugin uninstall` was confirmed to ORPHAN the cache (drops the
+  registry entry, stamps `.orphaned_at`, leaves every file in place) while real
+  Codex 0.144.6 `plugin remove` deletes its version directory outright but can
+  leave now-empty ancestor directories behind -- the uninstall postcondition and
+  the post-uninstall zero-discovery/residue check are now client-aware: Claude
+  reads `installed_plugins.json` (the client's own discoverability truth) instead
+  of raw cache-path presence, and Codex's residue check only matches files/symlinks,
+  not bare empty directories. The fifth, final live run completed the full native
+  lifecycle cleanly for both clients (all 10 marketplace-add/install/reinstall/
+  uninstall/marketplace-remove mutations, both clients' list/discovery inside and
+  outside the project, hook-trust observation, and installed-root helper-root
+  probes against the real installed cache all exit 0) and the Claude cold role
+  launch succeeded (bounded, cold, delegation denied). The Codex cold role launch
+  itself got a live `401 Unauthorized` from `api.openai.com`: the isolated
+  `CODEX_HOME` has no `auth.json` by design (never seeded from the owner's real
+  credentials, which the harness must never touch), so it cannot authenticate --
+  an infrastructure limitation, not a product defect, recorded honestly as
+  `infrastructure-blocked` (exit 4) in `.docs/evaluations/macos-dual-client-dogfood-
+  evidence.json` per the honesty rules, alongside the fully-succeeded Claude leg and
+  every non-auth-requiring Codex surface. `Status: Implemented` reflects that the
+  code + evidence-writing work for this pass is complete for evaluator adjudication;
+  it does NOT itself claim a dual-client PASS -- the plan treats the
+  infrastructure-blocked Codex role-launch leg as still blocking that claim until a
+  future pass can complete it (e.g. against a host with a real, non-owner-identity
+  Codex credential available to the isolated home) or the code evaluator/owner
+  otherwise adjudicates the evidence as sufficient. Steps 11 (three cold advisory
+  finders + code-evaluator routing) and 12 (archival) remain for later roles.
