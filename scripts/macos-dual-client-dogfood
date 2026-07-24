@@ -1280,16 +1280,23 @@ _mutation_output_text() {
 
 # _probe_role_launch <run-root> <client> — a real cold-role-launch dry run
 # through the real loom-launch-role, proving delegation-free, bounded
-# configuration; Codex is stubbed under dry-fixture mode.
+# configuration; Codex is stubbed under dry-fixture mode. The Codex path
+# execs a real client process (loom-launch-role never sets CODEX_HOME/HOME
+# itself), so it MUST inherit the same fixture-driven env redirect as every
+# native mutation -- otherwise a live run would silently launch the real
+# installed codex binary against the owner's real CODEX_HOME/HOME.
 _probe_role_launch() {
     local run_root="$1" client="$2" launcher out status hash
+    local -a env_args
     launcher="$REPO_ROOT/plugins/loom/bin/loom-launch-role"
     [ -x "$launcher" ] || {
         printf 'no-launch-role\n0\n'
         return
     }
     if [ "$client" = codex ]; then
-        out=$(LOOM_LAUNCH_ROLE_CODEX_BIN="${LOOM_DOGFOOD_CODEX_BIN:-codex}" "$INTERPRETER" "$launcher" codex researcher 2>&1)
+        env_args=()
+        while IFS= read -r kv; do env_args+=("$kv"); done < <(_client_env_args codex "$run_root")
+        out=$(env "${env_args[@]}" LOOM_LAUNCH_ROLE_CODEX_BIN="${LOOM_DOGFOOD_CODEX_BIN:-codex}" "$INTERPRETER" "$launcher" codex researcher 2>&1)
         status=$?
     else
         out=$("$INTERPRETER" "$launcher" claude researcher 2>&1)

@@ -23,7 +23,7 @@
     "codex": ["codex-home", "system-home", "tmp"]
   },
   "cacheLayout": {
-    "claude": "$RUN_ROOT/claude-home/plugins/cache/loom/loom",
+    "claude": "$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0",
     "codex": "$RUN_ROOT/codex-home/plugins/cache/loom/loom/0.2.0"
   },
   "commands": {

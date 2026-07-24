@@ -37,7 +37,7 @@ set -u
 if [ -n "${LOOM_STUB_LOG:-}" ]; then printf 'ARGV: %s\n' "$*" >>"$LOOM_STUB_LOG"; fi
 if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
     home_root="$CLAUDE_CONFIG_DIR"
-    cache_dir="$home_root/plugins/cache/loom/loom"
+    cache_dir="$home_root/plugins/cache/loom/loom/0.2.0"
 elif [ -n "${CODEX_HOME:-}" ]; then
     home_root="$CODEX_HOME"
     cache_dir="$home_root/plugins/cache/loom/loom/0.2.0"
@@ -231,7 +231,7 @@ mutate_direct() { "$LOOM_TEST_BASH" "$HARNESS" __mutation "$RUN_ROOT" "$@"; }
     native_hello_pid=$(jq -r 'select(.type=="native-hello").pid' "$journal")
     native_launch_pid=$(jq -r 'select(.type=="native-launch").pid' "$journal")
     [ "$native_hello_pid" = "$native_launch_pid" ]
-    [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/plugin.json" ]
+    [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0/plugin.json" ]
 }
 
 @test "hash chain is contiguous: each record's prevHash equals the previous record's hash" {
@@ -435,10 +435,10 @@ assert_no_live_orphan() {
     # the worker (now the exec'd stub client) legitimately keeps running and
     # completes the mutation even though the supervisor died mid-flight.
     for _ in $(seq 1 40); do
-        [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/plugin.json" ] && break
+        [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0/plugin.json" ] && break
         sleep 0.1
     done
-    [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/plugin.json" ]
+    [ -e "$RUN_ROOT/claude-home/plugins/cache/loom/loom/0.2.0/plugin.json" ]
     mutate claude-install claude install
     [ "$status" -eq 0 ]
     [ "$output" = applied ]
