@@ -5,7 +5,6 @@
   },
   "allowed_slices": [
     "client-floor-adapter-smoke",
-    "coord-identifier-boundaries",
     "coord-lock-ownership",
     "coord-schema-cas",
     "remote-first-integration-candidate",
@@ -106,8 +105,8 @@
     "state": "not-reached"
   },
   "improvement_plan_blob": "316ae4bc964fb422134151478b6369e1f9b4cfa5",
-  "phase": "publication-intent",
-  "predecessor": "32c53154de2c37786625bc2b8bb2a138a0d66643",
+  "phase": "active",
+  "predecessor": "3590602cf1041d732743ef27e27e0488a3ce5e62",
   "program_id": "loom-repository-improvement-2026-07-21-de3d1865-6950-4dd1-9c20-8246d0989196",
   "publication_intent": {
     "candidate_input_sha": "00582aa59b988b7e3dfa33808e4a1ff28b4d9303",
@@ -209,10 +208,34 @@
       "settled_at": "2026-07-24T14:31:29Z",
       "slice_head": "a000cefc9bc893db5e6bd54b865342081e9fdb27",
       "verified_target_ref": "refs/heads/main"
+    },
+    "coord-identifier-boundaries": {
+      "candidate_input_sha": "00582aa59b988b7e3dfa33808e4a1ff28b4d9303",
+      "evidence": {
+        "candidate_manifest_sha256": "be237eeb58a37304d514c05607cbd828cd2d9a6f1369d79ba4300fc8244040cc",
+        "evaluator_verdict_sha256": "1512f6e7546fb960b88f4ab08c723c69bac1306ab34b0a326f19a64034d20eca",
+        "review_aggregate_sha256": "88504234fcbab6f18795981fff797849fdb50b964413cebe4643cbb5991cb339",
+        "eval_record_sha256": "d25269c3ec6d9bc3bb2a14f8bc20d7d3747683188fa7bd69c642c89cfd59d57a",
+        "source_inventory_sha256": "be747664f783b3aaccf97be1b8471f97bdd29a4d03fba5c7f878f9485f85728a",
+        "reviewed_head": "82d689f8958a80ddfb46ac1035072467ae518037",
+        "rebase_note": "reviewed at 82d689f (base c899673); published head 00582aa is that slice rebased onto origin/main 0ae81c1 (Linux CI fix, disjoint file scripts/macos-dual-client-dogfood); loom-coord reviewed diff byte-identical pre/post rebase (sha 01a3a310...); rebased head re-gated green 452/452"
+      },
+      "final_base": "0ae81c1b4f211dd1cacaf6f0714c4f74ab037c10",
+      "initial_base": "c89967311a928f2e0c4ba08526bd15112721ba54",
+      "publication_intent_commit": "3590602cf1041d732743ef27e27e0488a3ce5e62",
+      "publication_intent_state_sha256": "20bb855f98d4142dd635a1e73512283b3773c46759cc94663b8e0544ef02e5e3",
+      "publication_mode": "remote-direct",
+      "receipt_sha256": "3cc9fd410be23feeeb3b5997d0fdd6b8693930599069ee9f758873a4dd5e86e1",
+      "result_sha": "00582aa59b988b7e3dfa33808e4a1ff28b4d9303",
+      "result_tree": "a2db21d3e44c2c30cb8d70701a82d6e6360e0491",
+      "schema": "loom-repository-bootstrap-slice-result/v1",
+      "settled_at": "2026-07-24T21:26:33Z",
+      "slice_head": "00582aa59b988b7e3dfa33808e4a1ff28b4d9303",
+      "verified_target_ref": "refs/heads/main"
     }
   },
   "schema": "loom-repository-bootstrap-state/v1",
-  "sequence": 8,
+  "sequence": 9,
   "target_ref": "refs/heads/main",
   "transition_ref": "refs/heads/loom/bootstrap-transition"
 }
