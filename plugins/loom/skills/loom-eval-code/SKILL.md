@@ -16,10 +16,14 @@ Target: the workflow argument (if empty, the next `Implemented` slice).
 
 1. Gather the **blind inputs only**: the slice's commit diff, the slice-plan it was
    meant to satisfy, and the target spec(s). **No author/identity hint.**
-2. Launch the **code-evaluator** role (Deep review profile) through your client's
-   root role-launcher — see `roles/code-evaluator.md` and spec 07's role-launch
-   mapping — with those inputs. Require a fresh, one-level, non-delegating cold
-   child.
+2. Launch the **code-evaluator** role (Deep review profile). Run
+   `bin/loom-launch-role <your-client> code-evaluator` — the sole client role
+   launcher (spec 10 → *Versioned compatibility and capability mapping*) — to
+   derive/validate the exact tier from the tracked compatibility matrix and
+   enforce a fresh, one-level, non-delegating cold child (Codex: this performs
+   the cold launch itself; Claude: launch natively per
+   `roles/code-evaluator.md` / `agents/code-evaluator.md` using its printed
+   configuration). Give it those blind inputs only.
 3. The role **re-runs the gate** (doesn't trust the claim), writes
    `.docs/evaluations/<slice>-eval.md` (PASS/FAIL + severity), sets status
    (`Landed` on PASS, `In Progress` on FAIL — status line only), and commits

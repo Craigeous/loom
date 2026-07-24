@@ -15,10 +15,14 @@ root-relative to that resolved root.
 Focus: the workflow argument (if empty, advance the next thing per
 `.docs/status/handoff.md` and `roadmap.md`).
 
-1. Launch the **planner** role (Deep review profile) through your client's root
-   role-launcher — see `roles/planner.md` and spec 07's role-launch mapping — with
-   the focus and current `.docs/` context (research, approved specs/ADRs, status).
-   Require a fresh, one-level, non-delegating cold child.
+1. Launch the **planner** role (Deep review profile). Run
+   `bin/loom-launch-role <your-client> planner` — the sole client role launcher
+   (spec 10 → *Versioned compatibility and capability mapping*) — to
+   derive/validate the exact tier from the tracked compatibility matrix and
+   enforce a fresh, one-level, non-delegating cold child (Codex: this performs
+   the cold launch itself; Claude: launch natively per `roles/planner.md` /
+   `agents/planner.md` using its printed configuration). Give it the focus and
+   current `.docs/` context (research, approved specs/ADRs, status).
 2. The role authors/revises an ADR, spec, or slice-plan from the playbook
    templates, sets `Status: Plan Review` (or `Draft` while working), and commits
    author-neutral. The planner is the sole writer of `spec/` and `ADR/`.

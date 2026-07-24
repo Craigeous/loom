@@ -18,10 +18,14 @@ Target: the workflow argument (if empty, the next artifact at `Plan Review` or
 1. Gather the **blind inputs only**: the artifact and its authority (slice-plan →
    spec(s)+ADRs; spec → ADRs; ADR → research/problem; research note → its cited
    sources). **Do not pass any author/identity hint.**
-2. Launch the **plan-evaluator** role (Deep review profile) through your client's
-   root role-launcher — see `roles/plan-evaluator.md` and spec 07's role-launch
-   mapping — with those inputs. Require a fresh, one-level, non-delegating cold
-   child.
+2. Launch the **plan-evaluator** role (Deep review profile). Run
+   `bin/loom-launch-role <your-client> plan-evaluator` — the sole client role
+   launcher (spec 10 → *Versioned compatibility and capability mapping*) — to
+   derive/validate the exact tier from the tracked compatibility matrix and
+   enforce a fresh, one-level, non-delegating cold child (Codex: this performs
+   the cold launch itself; Claude: launch natively per
+   `roles/plan-evaluator.md` / `agents/plan-evaluator.md` using its printed
+   configuration). Give it those blind inputs only.
 3. The role writes `.docs/evaluations/<name>-eval.md` (PASS/FAIL + severity
    findings), sets the artifact status (`Approved` on PASS, `Draft` on FAIL —
    status line only), and commits author-neutral.

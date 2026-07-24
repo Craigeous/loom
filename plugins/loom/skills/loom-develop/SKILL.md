@@ -14,10 +14,14 @@ root-relative to that resolved root.
 
 Target: the workflow argument (if empty, the next `Approved` slice-plan).
 
-1. Launch the **developer** role (Standard profile) through your client's root
-   role-launcher — see `roles/developer.md` and spec 07's role-launch mapping —
-   with the slice-plan path and target specs. Require a fresh, one-level,
-   non-delegating cold child.
+1. Launch the **developer** role (Standard profile). Run
+   `bin/loom-launch-role <your-client> developer` — the sole client role
+   launcher (spec 10 → *Versioned compatibility and capability mapping*) — to
+   derive/validate the exact tier from the tracked compatibility matrix and
+   enforce a fresh, one-level, non-delegating cold child (Codex: this performs
+   the cold launch itself; Claude: launch natively per `roles/developer.md` /
+   `agents/developer.md` using its printed configuration). Give it the
+   slice-plan path and target specs.
 2. The role sets `In Progress`, implements exactly the plan's scope, runs the full
    gate (format → lint → test), records evidence, sets `Implemented`, and commits
    author-neutral (a clean single-slice commit — the code evaluator reads its

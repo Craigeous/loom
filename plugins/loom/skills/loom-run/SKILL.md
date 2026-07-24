@@ -61,10 +61,14 @@ Requested scope: the workflow argument (if empty, ask).
    c. If the transition is an owner-claimed gate → pause, show the artifact + the
       evaluator's verdict, await the owner's decision.
    d. Launch the dispatched role (right profile; focused input that hands `.docs/`
-      **paths, not bodies**; blind inputs for evaluators) through your client's
-      root role-launcher — see `roles/<role>.md` and spec 07's role-launch mapping.
-      Require the launch to be a fresh, one-level, non-delegating cold child. Tell
-      the role to return only the **bounded contract** — `{Status:, path(s),
+      **paths, not bodies**; blind inputs for evaluators). Run
+      `bin/loom-launch-role <your-client> <role>` — the sole client role
+      launcher (spec 10 → *Versioned compatibility and capability mapping*) —
+      to derive/validate the exact tier from the tracked compatibility matrix
+      and enforce a fresh, one-level, non-delegating cold child (Codex: this
+      performs the cold launch itself; Claude: launch natively per
+      `roles/<role>.md` / `agents/<role>.md` using its printed configuration).
+      Tell the role to return only the **bounded contract** — `{Status:, path(s),
       ≤~150-token summary, the one branch signal}`, no echoed body
       (orchestration.md → *Context discipline*). Independent/disjoint slices may
       run in parallel (worktree-per-slice, owner opts in) — see `parallelism.md`
