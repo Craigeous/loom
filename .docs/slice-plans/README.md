@@ -17,7 +17,7 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-- [coord-identifier-boundaries.md](coord-identifier-boundaries.md) — `Plan Review` —
+- [coord-identifier-boundaries.md](coord-identifier-boundaries.md) — `In Progress` —
   M1 coordinator-safety slice: add centralized identifier validation (session ids,
   slice names, PIDs; grammar `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`, no `/`, `..`,
   whitespace, control bytes, Unicode separators) to `plugins/loom/bin/loom-coord`,
