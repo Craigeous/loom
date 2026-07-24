@@ -466,3 +466,42 @@ client transcripts, guarded dogfood cleanup receipts below
   one-shared-hook-manifest check. Wiring `loom-launch-role` into `loom-run`/the role
   skills themselves is out of this pass's path boundary (roles/skills are frozen for
   passes 1-3) and is deferred to the harness pass.
+- 2026-07-23/24 (pass 4, Step 8 + deferred wiring): the harness's supervisor/worker
+  handshake is implemented with real OS process groups (`set -m` around exactly the
+  backgrounding statement that must start a new group; no `set -m` around the
+  worker fork, so it inherits the supervisor's group), an append-only hash-chained
+  NDJSON journal per attempt (`control/journal/<substep>.<attempt>.ndjson`, one
+  atomic whole-file rewrite per record or record-pair), and `ps -o lstart=`/`pgid=`
+  for the macOS birth/group discriminators the plan requires (no `/proc`, no
+  `stat -c`). Two structural bash pitfalls were found the hard way and are now
+  guarded everywhere: (1) `exit` inside a `$(...)` command substitution only exits
+  that subshell, silently swallowing fail-closed exits at every phase-entry call
+  site until each was changed to check the subshell's own status explicitly; (2)
+  wrapping the mutation driver itself in `$(...)` runs the whole supervisor spawn
+  inside a throwaway subshell, which both defers the process's own INT/TERM trap
+  until that subshell exits and (observed directly, repeatably) lets the subshell's
+  teardown reap an already-escaped-process-group descendant before it can be
+  observed -- the driver now communicates its result through a global variable
+  instead of stdout. A third, environment-specific finding: Bats' `run` helper
+  itself reaps a descendant that has escaped into its own process group once the
+  wrapped command returns, so the three Bats cases that depend on a durable,
+  independently-grouped supervisor/orphan outliving the wrapped call use a
+  `mutate_direct` (non-`run`) helper and assert against the journal file instead of
+  `$status`/`$output`; this is a Bats/test-harness property, not a fix to the
+  product script (a real terminal's Ctrl-C, unlike `kill -INT <pid>` on a single
+  process, reaches the whole foreground group, so the INT/TERM signal tests still
+  use plain `run`-free backgrounding with `kill -INT "$pid"` and pass because the
+  trap fires in-process regardless). The post-uninstall residue check was widened
+  from the exact `cacheLayout` path to each client's whole `plugins/` tree so it is
+  reachable as an outcome distinct from a mutation's own narrower cache-absent
+  postcondition (the fixture's `marketplace-add`/`marketplace-remove` postcondition
+  was correspondingly narrowed to "none", since those commands never touch the
+  plugin cache in any real client). Scope actually landed: `--prepare`,
+  `--exercise` (marketplace-add/install/reinstall/list per client plus a
+  `loom-launch-role` role-launch probe and a real hook-wire-fixture probe against
+  the actual repo hook), `--uninstall` (uninstall/marketplace-remove/residue check),
+  `--clean`, full resume/quarantine/cleanup reconciliation, and the two schemas +
+  fixture. Not yet done (deferred to the next pass): a live run against the real
+  installed Claude/Codex binaries (Verification 7/8), the three cold advisory
+  finders + code-evaluator routing (Step 11), and archival (Step 12) -- Status stays
+  `In Progress`.
