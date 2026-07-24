@@ -1,0 +1,1584 @@
+#!/usr/bin/env bash
+# macos-dual-client-dogfood — fail-closed macOS dual-client dogfood harness
+# (macos-dual-client-dogfood plan Step 8/9/10; ADR 0024).
+#
+# Phases:
+#   --prepare [--dry-fixture]     create an isolated run below the canonical
+#                                  system temp dir; print its absolute path.
+#   --exercise <run-root>         marketplace add / install / list / reinstall
+#                                  for both clients, ending phase "exercised".
+#   --uninstall <run-root>        native uninstall + marketplace-remove +
+#                                  residue check for both clients.
+#   --clean <run-root>            the only recursive filesystem cleanup.
+#
+# Every native mutation (marketplace-add/install/uninstall/marketplace-remove)
+# runs through a durable supervisor/worker handshake: nothing is mutated
+# before both the supervisor and the mutating worker have journaled durable
+# identity, and only a single atomic release record per gate lets a blocked
+# process continue. See the slice-plan Step 8 for the full contract; this
+# file is deliberately the ONLY place that topology lives.
+#
+# DRY FIXTURE MODE: --prepare --dry-fixture records dryFixture:true; every
+# later phase reads it back from state.json. In dry-fixture mode, native
+# client binaries are resolved from LOOM_DOGFOOD_CLAUDE_BIN /
+# LOOM_DOGFOOD_CODEX_BIN (defaulting to "claude"/"codex" only outside dry
+# mode) so the Bats suite never spawns a real client.
+#
+# FAIL DIRECTION: fail-closed. Exit codes (plan Step 10):
+#   0 success | 2 usage | 3 unsafe target/state or quarantined partial
+#   mutation | 4 infrastructure block | 5 product failure | 6 residue |
+#   130 INT | 143 TERM.
+set -u
+
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# ---------------------------------------------------------------------------
+# Location / constants
+# ---------------------------------------------------------------------------
+
+case "$0" in
+/*) ;;
+*)
+    printf 'macos-dual-client-dogfood: must be invoked by absolute path\n' >&2
+    exit 2
+    ;;
+esac
+
+INTERPRETER="${BASH:-/bin/bash}"
+MAX_ATTEMPTS=5
+DEFAULT_HANDSHAKE_TIMEOUT=20
+POLL_INTERVAL=0.05
+# Set by _do_mutation, a plain statement never wrapped in $(...) -- see its
+# own header comment for why.
+MUTATION_OUTCOME=""
+INFRA_MARKERS='usage limit
+rate limit
+missing trust path
+model unavailable
+model is unavailable'
+
+# _canon_dir <path> — canonicalize an existing directory to its absolute
+# physical path.
+_canon_dir() {
+    CDPATH='' cd -- "$1" 2>/dev/null && pwd -P
+}
+
+# _canon_path <path> — canonicalize an existing file or directory, resolving
+# any symlink chain.
+_canon_path() {
+    local target="$1" dir base resolved link i=0
+    if [ -d "$target" ]; then
+        _canon_dir "$target"
+        return $?
+    fi
+    { [ -e "$target" ] || [ -L "$target" ]; } || return 1
+    dir=$(dirname -- "$target")
+    base=$(basename -- "$target")
+    dir=$(_canon_dir "$dir") || return 1
+    resolved="$dir/$base"
+    while [ -L "$resolved" ]; do
+        i=$((i + 1))
+        [ "$i" -gt 40 ] && return 1
+        link=$(readlink -- "$resolved") || return 1
+        case "$link" in
+        /*) resolved="$link" ;;
+        *) resolved="$(dirname -- "$resolved")/$link" ;;
+        esac
+        dir=$(_canon_dir "$(dirname -- "$resolved")") || return 1
+        resolved="$dir/$(basename -- "$resolved")"
+    done
+    printf '%s\n' "$resolved"
+}
+
+SELF=$(_canon_path "$0") || {
+    printf 'macos-dual-client-dogfood: cannot canonicalize self\n' >&2
+    exit 2
+}
+SCRIPT_DIR=$(dirname -- "$SELF")
+REPO_ROOT=$(_canon_dir "$SCRIPT_DIR/..") || {
+    printf 'macos-dual-client-dogfood: cannot canonicalize repository root\n' >&2
+    exit 2
+}
+FIXTURE_PATH="$REPO_ROOT/plugins/loom/adapters/fixtures/v0.2.0/dogfood/macos-arm64.json"
+STATE_SCHEMA_PATH="$REPO_ROOT/plugins/loom/schemas/loom-dogfood-state-v1.schema.json"
+EVIDENCE_SCHEMA_PATH="$REPO_ROOT/plugins/loom/schemas/loom-dogfood-evidence-v1.schema.json"
+
+# _git_common_dir — the single shared .git metadata directory, correct both
+# for a plain repository and for a linked worktree (where .git is a FILE,
+# not a directory).
+_git_common_dir() {
+    local out
+    out=$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && [ -n "$out" ] && {
+        printf '%s\n' "$out"
+        return 0
+    }
+    out=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null) || return 1
+    case "$out" in
+    /*) printf '%s\n' "$out" ;;
+    *) printf '%s\n' "$REPO_ROOT/$out" ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# Generic helpers
+# ---------------------------------------------------------------------------
+
+_usage() {
+    cat >&2 <<'EOF'
+usage: macos-dual-client-dogfood --prepare [--dry-fixture]
+       macos-dual-client-dogfood --exercise <run-root>
+       macos-dual-client-dogfood --uninstall <run-root>
+       macos-dual-client-dogfood --clean <run-root>
+EOF
+    exit 2
+}
+
+_fail_unsafe() {
+    printf 'macos-dual-client-dogfood: %s\n' "$1" >&2
+    exit 3
+}
+
+_fail_infra() {
+    printf 'macos-dual-client-dogfood: %s\n' "$1" >&2
+    exit 4
+}
+
+_fail_product() {
+    printf 'macos-dual-client-dogfood: %s\n' "$1" >&2
+    exit 5
+}
+
+_fail_residue() {
+    printf 'macos-dual-client-dogfood: %s\n' "$1" >&2
+    exit 6
+}
+
+_sha256_str() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$1" | sha256sum | awk '{print $1}'
+    else
+        printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+    fi
+}
+
+_sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum -- "$1" | awk '{print $1}'
+    else
+        shasum -a 256 -- "$1" | awk '{print $1}'
+    fi
+}
+
+_now_iso() {
+    date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+# _random_token — a fresh, unique attempt/run identifier.
+_random_token() {
+    local tmp base
+    tmp=$(mktemp -u "${TMPDIR:-/tmp}/loom-dogfood-token.XXXXXXXXXXXXXXXX") || return 1
+    base=$(basename -- "$tmp")
+    printf '%s%s\n' "${base#loom-dogfood-token.}" "$$"
+}
+
+# _atomic_write <path> <content> — write-to-temp then rename-into-place.
+_atomic_write() {
+    local path="$1" content="$2" tmp
+    tmp="$path.tmp.$$"
+    printf '%s' "$content" >"$tmp" || return 1
+    mv -f -- "$tmp" "$path"
+}
+
+_load_fixture() {
+    [ -f "$FIXTURE_PATH" ] || _fail_unsafe "dogfood fixture is missing"
+    cat -- "$FIXTURE_PATH"
+}
+
+# _inject <point> — self-terminate if the caller asked this exact point to
+# crash. Test-only: LOOM_DOGFOOD_INJECT is otherwise unset in real runs.
+# LOOM_DOGFOOD_INJECT_ONCE_FILE makes the injection fire exactly once (the
+# first process to reach the point claims the flag file), so tests can model
+# a single interruption followed by recovery instead of persistent death.
+_inject() {
+    [ "${LOOM_DOGFOOD_INJECT:-}" = "$1" ] || return 0
+    if [ -n "${LOOM_DOGFOOD_INJECT_ONCE_FILE:-}" ]; then
+        [ -e "$LOOM_DOGFOOD_INJECT_ONCE_FILE" ] && return 0
+        : >"$LOOM_DOGFOOD_INJECT_ONCE_FILE" 2>/dev/null || true
+    fi
+    if [ -n "${LOOM_DOGFOOD_INJECT_LOG:-}" ]; then
+        printf 'inject:%s pid=%s\n' "$1" "$$" >>"$LOOM_DOGFOOD_INJECT_LOG" 2>/dev/null || true
+    fi
+    # $$ is the top-level process even inside a command-substitution
+    # subshell (Bash 3.2 has no BASHPID); kill it, then exit so the
+    # enclosing subshell chain cannot survive its parent and carry the
+    # interrupted invocation to completion.
+    kill -9 "$$"
+    exit 137
+}
+
+command -v jq >/dev/null 2>&1 || {
+    printf 'macos-dual-client-dogfood: jq is required\n' >&2
+    exit 2
+}
+
+# ---------------------------------------------------------------------------
+# Containment / marker / candidate / status validation (every phase)
+# ---------------------------------------------------------------------------
+
+# _validate_run_root <candidate-path> — prints the canonical run root or
+# fails closed (exit 3): must be an absolute, non-symlink, existing
+# directory, physically below the canonical system temp prefix, and must
+# not overlap the owner's real home in either direction.
+_validate_run_root() {
+    local candidate="$1" canon tmp_base home_canon
+    case "$candidate" in
+    /*) ;;
+    *) _fail_unsafe "run root must be an absolute path" ;;
+    esac
+    [ -e "$candidate" ] || _fail_unsafe "run root does not exist"
+    [ ! -L "$candidate" ] || _fail_unsafe "run root is a symlink"
+    [ -d "$candidate" ] || _fail_unsafe "run root is not a directory"
+    canon=$(_canon_dir "$candidate") || _fail_unsafe "run root cannot be canonicalized"
+    [ "$canon" = "$candidate" ] || _fail_unsafe "run root physical path diverges from the literal path (symlink ancestor)"
+    tmp_base=$(_canon_dir "${TMPDIR:-/tmp}") || _fail_unsafe "cannot canonicalize the system temp root"
+    case "$canon" in
+    "$tmp_base"/*) ;;
+    *) _fail_unsafe "run root is outside the canonical system temp prefix" ;;
+    esac
+    home_canon=$(_canon_dir "${HOME:-}" 2>/dev/null || true)
+    if [ -n "$home_canon" ]; then
+        case "$canon" in
+        "$home_canon" | "$home_canon"/*) _fail_unsafe "run root overlaps the owner home" ;;
+        esac
+        case "$home_canon" in
+        "$canon" | "$canon"/*) _fail_unsafe "owner home overlaps the run root" ;;
+        esac
+    fi
+    printf '%s\n' "$canon"
+}
+
+# _state_path <run-root>
+_state_path() { printf '%s/state.json\n' "$1"; }
+
+# _validate_marker <run-root> — the marker file and state.json marker field
+# must exist, agree, and be non-empty; prints the marker.
+_validate_marker() {
+    local run_root="$1" marker_file state_path state_marker
+    marker_file="$run_root/marker"
+    state_path=$(_state_path "$run_root")
+    [ -f "$marker_file" ] || _fail_unsafe "owner marker file is missing"
+    [ ! -L "$marker_file" ] || _fail_unsafe "owner marker file is a symlink"
+    [ -f "$state_path" ] || _fail_unsafe "state.json is missing"
+    [ ! -L "$state_path" ] || _fail_unsafe "state.json is a symlink"
+    marker=$(cat -- "$marker_file" 2>/dev/null) || _fail_unsafe "cannot read owner marker"
+    state_marker=$(jq -r '.marker // empty' "$state_path" 2>/dev/null) || _fail_unsafe "state.json is not valid JSON"
+    [ -n "$marker" ] || _fail_unsafe "owner marker is empty"
+    [ "$marker" = "$state_marker" ] || _fail_unsafe "owner marker mismatch"
+    printf '%s\n' "$marker"
+}
+
+_read_state() {
+    local run_root="$1"
+    cat -- "$(_state_path "$run_root")"
+}
+
+_state_field() {
+    local run_root="$1" field="$2"
+    _read_state "$run_root" | jq -r --arg f "$field" '.[$f] // empty'
+}
+
+# _validate_state_schema <run-root> — schema id/candidate/schema-shape checks.
+_validate_state_schema() {
+    local run_root="$1" state_json schema_ok candidate current_candidate
+    state_json=$(_read_state "$run_root") || _fail_unsafe "cannot read state.json"
+    schema_ok=$(printf '%s' "$state_json" | jq -r '.schema // empty')
+    [ "$schema_ok" = "loom-dogfood-state/v1" ] || _fail_unsafe "state.json schema mismatch"
+    candidate=$(printf '%s' "$state_json" | jq -r '.candidate // empty')
+    [ -n "$candidate" ] || _fail_unsafe "state.json is missing the candidate"
+    current_candidate=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null) || _fail_unsafe "cannot resolve the current candidate"
+    [ "$candidate" = "$current_candidate" ] || _fail_unsafe "candidate drift: state.json does not match the current repository HEAD"
+}
+
+# _require_phase <run-root> <allowed-phase...> — the current phase must be
+# one of the allowed phases for the requested operation.
+_require_phase() {
+    local run_root="$1" phase allowed
+    shift
+    phase=$(_state_field "$run_root" phase)
+    for allowed in "$@"; do
+        [ "$allowed" = "$phase" ] && return 0
+    done
+    _fail_unsafe "current phase ($phase) does not permit this operation"
+}
+
+# _write_state <run-root> <jq-merge-filter> — atomically merge fields into
+# state.json (updatedAt is always refreshed).
+_write_state() {
+    local run_root="$1" filter="$2" state_path current merged
+    state_path=$(_state_path "$run_root")
+    current=$(cat -- "$state_path")
+    merged=$(printf '%s' "$current" | jq --arg now "$(_now_iso)" "$filter"' | .updatedAt=$now') || return 1
+    _atomic_write "$state_path" "$merged"
+}
+
+# ---------------------------------------------------------------------------
+# Canonical inventory (sorted relative paths, type, mode, size, SHA-256)
+# ---------------------------------------------------------------------------
+
+# _inventory_root <label> <absolute-root> — one compact JSON line per entry.
+_inventory_root() {
+    local label="$1" root="$2" rel path kind mode size hash
+    [ -d "$root" ] || return 0
+    (CDPATH='' cd -- "$root" && find . -mindepth 1 -print0) 2>/dev/null |
+        LC_ALL=C sort -z |
+        while IFS= read -r -d '' rel; do
+            path="$root/${rel#./}"
+            if [ -L "$path" ]; then
+                kind="symlink"
+            elif [ -d "$path" ]; then
+                kind="dir"
+            elif [ -f "$path" ]; then
+                kind="file"
+            else
+                kind="other"
+            fi
+            mode=$(stat -f '%Lp' -- "$path" 2>/dev/null || printf '000')
+            size=$(stat -f '%z' -- "$path" 2>/dev/null || printf '0')
+            hash=""
+            [ "$kind" = file ] && hash=$(_sha256_file "$path")
+            jq -nc --arg root "$label" --arg rel "${rel#./}" --arg type "$kind" \
+                --arg mode "$mode" --arg size "$size" --arg hash "$hash" \
+                '{root:$root,path:$rel,type:$type,mode:$mode,size:($size|tonumber),hash:$hash}'
+        done
+}
+
+# _compute_inventory <run-root> — canonical, sorted JSON array over the five
+# owned roots; prints one compact array.
+_compute_inventory() {
+    local run_root="$1" label
+    {
+        for label in claude-home codex-home project system-home tmp; do
+            _inventory_root "$label" "$run_root/$label"
+        done
+    } | jq -sc 'sort_by(.root,.path)'
+}
+
+_inventory_hash() {
+    printf '%s' "$1" | jq -Sc '.' | _sha256_str_stdin
+}
+
+_sha256_str_stdin() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | awk '{print $1}'
+    else
+        shasum -a 256 | awk '{print $1}'
+    fi
+}
+
+# _write_inventory <run-root> <slug> <suffix "pre"|"post"> <json>
+_write_inventory() {
+    local run_root="$1" slug="$2" suffix="$3" json="$4" dir path
+    dir="$run_root/control/inventory"
+    mkdir -p "$dir"
+    path="$dir/$slug.$suffix.json"
+    _atomic_write "$path" "$(printf '%s' "$json" | jq -Sc '.')"
+}
+
+# _diff_inventory_roots <pre-json> <post-json> — the set of distinct root
+# labels touched (added or removed entries) between two inventories.
+_diff_inventory_roots() {
+    jq -nc --argjson a "$1" --argjson b "$2" \
+        '( ($b - $a) + ($a - $b) ) | map(.root) | unique | .[]' -r
+}
+
+# ---------------------------------------------------------------------------
+# Hash-chained immutable journal (one file per mutation attempt)
+# ---------------------------------------------------------------------------
+
+# _journal_path <run-root> <substep> <attempt>
+_journal_path() {
+    printf '%s/control/journal/%s.%s.ndjson\n' "$1" "$2" "$3"
+}
+
+# _latest_attempt <run-root> <substep> — highest existing attempt number, or 0.
+_latest_attempt() {
+    local run_root="$1" substep="$2" dir n best=0 f base
+    dir="$run_root/control/journal"
+    [ -d "$dir" ] || {
+        printf '0\n'
+        return 0
+    }
+    for f in "$dir/$substep".*.ndjson; do
+        [ -e "$f" ] || continue
+        base=$(basename -- "$f")
+        n=${base#"$substep".}
+        n=${n%.ndjson}
+        case "$n" in
+        '' | *[!0-9]*) continue ;;
+        esac
+        [ "$n" -gt "$best" ] && best="$n"
+    done
+    printf '%s\n' "$best"
+}
+
+# _journal_last_hash <journal> — last record's hash, or "genesis".
+_journal_last_hash() {
+    if [ -s "$1" ]; then
+        tail -n 1 -- "$1" | jq -r '.hash'
+    else
+        printf 'genesis\n'
+    fi
+}
+
+_journal_last_seq() {
+    if [ -s "$1" ]; then
+        tail -n 1 -- "$1" | jq -r '.seq'
+    else
+        printf -- '-1\n'
+    fi
+}
+
+# _journal_record <journal> <type> — the last record of a given type, or empty.
+_journal_record() {
+    local journal="$1" type="$2"
+    [ -f "$journal" ] || return 0
+    jq -c --arg t "$type" 'select(.type==$t)' -- "$journal" 2>/dev/null | tail -n 1
+}
+
+# _journal_has <journal> <type>
+_journal_has() {
+    local rec
+    rec=$(_journal_record "$1" "$2")
+    [ -n "$rec" ]
+}
+
+# _append_journal_records <journal> <record-json-line>... — append one or
+# more already-built compact JSON records (seq/prevHash/hash added here) in
+# ONE atomic whole-file rewrite, so a multi-record gate (e.g. the
+# launch+release pair) is observed all-or-nothing from outside.
+_append_journal_records() {
+    local journal="$1"
+    shift
+    local dir prev seq tmp payload base hash final existing
+    dir=$(dirname -- "$journal")
+    mkdir -p "$dir"
+    prev=$(_journal_last_hash "$journal")
+    seq=$(($(_journal_last_seq "$journal") + 1))
+    existing=""
+    [ -s "$journal" ] && existing=$(cat -- "$journal")
+    tmp="$journal.tmp.$$"
+    {
+        [ -n "$existing" ] && printf '%s\n' "$existing"
+        for payload in "$@"; do
+            base=$(printf '%s' "$payload" | jq -Sc --argjson seq "$seq" --arg prev "$prev" --arg ts "$(_now_iso)" \
+                '{seq:$seq,prevHash:$prev,ts:$ts} + .')
+            hash=$(_sha256_str "$base")
+            final=$(printf '%s' "$base" | jq -Sc --arg h "$hash" '. + {hash:$h}')
+            printf '%s\n' "$final"
+            prev="$hash"
+            seq=$((seq + 1))
+        done
+    } >"$tmp"
+    mv -f -- "$tmp" "$journal"
+}
+
+# _record_tokens <run-root> <token> — append every token this run has ever
+# minted so cleanup/quarantine death-proof can scan for all of them, not
+# just the latest attempt's.
+_record_tokens() {
+    local run_root="$1" token="$2" path tmp
+    path="$run_root/control/tokens"
+    tmp="$path.tmp.$$"
+    {
+        [ -f "$path" ] && cat -- "$path"
+        printf '%s\n' "$token"
+    } >"$tmp"
+    mv -f -- "$tmp" "$path"
+}
+
+_all_tokens() {
+    local run_root="$1" path
+    path="$run_root/control/tokens"
+    [ -f "$path" ] && cat -- "$path"
+}
+
+# ---------------------------------------------------------------------------
+# Process identity (macOS/BSD ps; NO /proc, NO stat -c)
+# ---------------------------------------------------------------------------
+
+_pid_birth() {
+    ps -o lstart= -p "$1" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+_pid_pgid() {
+    ps -o pgid= -p "$1" 2>/dev/null | tr -d ' '
+}
+
+_pid_alive() {
+    kill -0 "$1" 2>/dev/null
+}
+
+# _identity_alive <pid> <birth> — true only if pid is alive AND its current
+# birth/start time still matches the recorded one (rejects PID reuse).
+_identity_alive() {
+    local pid="$1" birth="$2" now_birth
+    _pid_alive "$pid" || return 1
+    now_birth=$(_pid_birth "$pid")
+    [ -n "$now_birth" ] && [ "$now_birth" = "$birth" ]
+}
+
+# _token_present_anywhere <token> — a positive scan of the WHOLE process
+# table's argv for a still-live process carrying this token, regardless of
+# process group (catches an escaped descendant). The harness always passes
+# its token as a positional argv element (own environment cannot be read
+# cross-process on macOS without elevated privileges), so this is the
+# authoritative "token still live somewhere" proof.
+_token_present_anywhere() {
+    pgrep -f -- "$1" >/dev/null 2>&1
+}
+
+# _exe_hash — SHA-256 of this harness's own physical executable bytes, used
+# as the supervisor/worker's proof of running the pinned harness code.
+_exe_hash() {
+    _sha256_file "$SELF"
+}
+
+# _wait_for_record <journal> <type> <deadline-epoch> — poll for a record of
+# the given type; prints it and returns 0, or returns 1 once the deadline
+# passes.
+_wait_for_record() {
+    local journal="$1" type="$2" deadline="$3" rec
+    while :; do
+        rec=$(_journal_record "$journal" "$type")
+        if [ -n "$rec" ]; then
+            printf '%s\n' "$rec"
+            return 0
+        fi
+        [ "$(date +%s)" -ge "$deadline" ] && return 1
+        sleep "$POLL_INTERVAL"
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Fixture-driven client argv/env/postcondition
+# ---------------------------------------------------------------------------
+
+_client_bin() {
+    local run_root="$1" client="$2" dry
+    dry=$(_state_field "$run_root" dryFixture)
+    if [ "$dry" = "true" ]; then
+        case "$client" in
+        claude) printf '%s\n' "${LOOM_DOGFOOD_CLAUDE_BIN:-}" ;;
+        codex) printf '%s\n' "${LOOM_DOGFOOD_CODEX_BIN:-}" ;;
+        esac
+    else
+        printf '%s\n' "$client"
+    fi
+}
+
+# _client_argv <client> <opKey> <run-root> — one resolved argv element per
+# line ($REPO_ROOT/$RUN_ROOT expanded).
+_client_argv() {
+    local client="$1" opkey="$2" run_root="$3" fixture arr
+    fixture=$(_load_fixture)
+    arr=$(printf '%s' "$fixture" | jq -c --arg c "$client" --arg k "$opkey" '.commands[$c][$k] // empty')
+    { [ -n "$arr" ] && [ "$arr" != "null" ]; } || return 1
+    printf '%s' "$arr" | jq -r --arg repo "$REPO_ROOT" --arg run "$run_root" \
+        '.[] | gsub("\\$REPO_ROOT"; $repo) | gsub("\\$RUN_ROOT"; $run)'
+}
+
+# _client_env_args <client> <run-root> — one "NAME=VALUE" per line.
+_client_env_args() {
+    local client="$1" run_root="$2" fixture
+    fixture=$(_load_fixture)
+    printf '%s' "$fixture" | jq -r --arg c "$client" --arg run "$run_root" \
+        '.environment[$c] | to_entries[] | "\(.key)=\(.value | gsub("\\$RUN_ROOT"; $run))"'
+}
+
+_allowed_root_labels() {
+    local client="$1" fixture
+    fixture=$(_load_fixture)
+    printf '%s' "$fixture" | jq -c --arg c "$client" '.allowedRoots[$c] // []'
+}
+
+_postcondition_label() {
+    case "$1" in
+    install) printf 'cache-present\n' ;;
+    uninstall) printf 'cache-absent\n' ;;
+    # marketplace-add/remove only register/deregister the marketplace; they
+    # never create or remove the installed plugin cache, so no cache-layout
+    # postcondition applies (native exit + allowed-root-only diff still are).
+    *) printf 'none\n' ;;
+    esac
+}
+
+_check_postcondition() {
+    local run_root="$1" client="$2" opkey="$3" label cache_path fixture
+    label=$(_postcondition_label "$opkey")
+    [ "$label" = none ] && return 0
+    fixture=$(_load_fixture)
+    cache_path=$(printf '%s' "$fixture" | jq -r --arg c "$client" '.cacheLayout[$c]')
+    cache_path=${cache_path//\$RUN_ROOT/$run_root}
+    case "$label" in
+    cache-present) [ -e "$cache_path" ] ;;
+    cache-absent) [ ! -e "$cache_path" ] ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# Supervisor / worker process bodies (each is a fresh exec of THIS script)
+# ---------------------------------------------------------------------------
+
+# run_worker <run-root> <journal> <token> <client> <opKey> <deadline-epoch>
+# Journals its own durable identity, blocks for the single native-release
+# record, then execs the pinned client -- preserving this PID across the
+# process replacement. Never mutates anything before native-release exists.
+run_worker() {
+    local run_root="$1" journal="$2" token="$3" client="$4" opkey="$5" deadline="$6"
+    local pid birth rec client_bin out_dir stdout_path stderr_path base
+    pid=$$
+    birth=$(_pid_birth "$pid")
+    _inject "before:native-hello"
+    _append_journal_records "$journal" \
+        "$(jq -nc --arg type native-hello --arg token "$token" --argjson pid "$pid" --arg birth "$birth" \
+            '{type:$type,token:$token,pid:$pid,birth:$birth}')"
+    _inject "after:native-hello"
+
+    rec=$(_wait_for_record "$journal" native-release "$deadline") || exit 3
+    [ "$(printf '%s' "$rec" | jq -r '.token')" = "$token" ] || exit 3
+    _inject "before:exec"
+
+    # Test-only descendant hook: spawn a token-tagged, detached process
+    # BEFORE exec so orphan/escape reconciliation can be proven against a
+    # real live process. Never present in a real dogfood run.
+    if [ -n "${LOOM_DOGFOOD_SPAWN_ORPHAN:-}" ]; then
+        if [ "$LOOM_DOGFOOD_SPAWN_ORPHAN" = escaped ]; then
+            (
+                set -m
+                "$INTERPRETER" -c 'sleep 5; :' "loom-dogfood-orphan:$token" &
+            )
+        else
+            ("$INTERPRETER" -c 'sleep 5; :' "loom-dogfood-orphan:$token" &)
+        fi
+    fi
+
+    client_bin=$(_client_bin "$run_root" "$client")
+    [ -n "$client_bin" ] || {
+        printf 'macos-dual-client-dogfood: no client binary resolved (dry-fixture stub unset?)\n' >&2
+        exit 5
+    }
+
+    out_dir="$run_root/control/output"
+    mkdir -p "$out_dir"
+    base=$(basename -- "$journal")
+    base=${base%.ndjson}
+    stdout_path="$out_dir/$base.stdout"
+    stderr_path="$out_dir/$base.stderr"
+
+    local -a client_args env_args
+    client_args=()
+    while IFS= read -r arg; do client_args+=("$arg"); done < <(_client_argv "$client" "$opkey" "$run_root")
+    env_args=()
+    while IFS= read -r kv; do env_args+=("$kv"); done < <(_client_env_args "$client" "$run_root")
+
+    exec >"$stdout_path" 2>"$stderr_path"
+    exec env "${env_args[@]}" LOOM_DOGFOOD_TOKEN="$token" "$client_bin" "${client_args[@]}"
+}
+
+# run_supervisor <run-root> <journal> <token> <client> <opKey> <deadline-epoch>
+# Durable, separate from the worker: journals its own identity in a NEW
+# process group, gates itself on the single supervisor-release record,
+# forks the worker into the SAME group, gates it on native-release, then
+# stays alive to record the terminal outcome even after the worker execs.
+run_supervisor() {
+    local run_root="$1" journal="$2" token="$3" client="$4" opkey="$5" deadline="$6"
+    local pid pgid birth exe_hash worker_pid rec wpid wbirth native_exit
+    local out_dir base stdout_path stderr_path stdout_hash stderr_hash
+    pid=$$
+    pgid=$(_pid_pgid "$pid")
+    birth=$(_pid_birth "$pid")
+    exe_hash=$(_exe_hash)
+
+    _inject "before:supervisor-hello"
+    _append_journal_records "$journal" \
+        "$(jq -nc --arg type supervisor-hello --arg token "$token" --argjson pid "$pid" \
+            --argjson pgid "$pgid" --arg birth "$birth" --arg exe "$exe_hash" \
+            '{type:$type,token:$token,pid:$pid,pgid:$pgid,birth:$birth,exeHash:$exe}')"
+    _inject "after:supervisor-hello"
+
+    rec=$(_wait_for_record "$journal" supervisor-release "$deadline") || {
+        _append_journal_records "$journal" \
+            "$(jq -nc --arg type aborted-before-native --arg token "$token" \
+                --arg reason self-timeout-awaiting-supervisor-release '{type:$type,token:$token,reason:$reason}')"
+        exit 3
+    }
+    [ "$(printf '%s' "$rec" | jq -r '.token')" = "$token" ] || exit 3
+
+    "$INTERPRETER" "$SELF" __worker "$run_root" "$journal" "$token" "$client" "$opkey" "$deadline" &
+    worker_pid=$!
+
+    rec=$(_wait_for_record "$journal" native-hello "$deadline") || {
+        local tries=0
+        while _pid_alive "$worker_pid" && [ "$tries" -lt 400 ]; do
+            sleep "$POLL_INTERVAL"
+            tries=$((tries + 1))
+        done
+        _pid_alive "$worker_pid" && kill -9 "$worker_pid" 2>/dev/null
+        wait "$worker_pid" 2>/dev/null
+        _append_journal_records "$journal" \
+            "$(jq -nc --arg type aborted-before-native --arg token "$token" \
+                --arg reason worker-hello-timeout '{type:$type,token:$token,reason:$reason}')"
+        exit 3
+    }
+    wpid=$(printf '%s' "$rec" | jq -r '.pid')
+    wbirth=$(printf '%s' "$rec" | jq -r '.birth')
+    if [ "$wpid" != "$worker_pid" ] || [ "$(printf '%s' "$rec" | jq -r '.token')" != "$token" ]; then
+        _append_journal_records "$journal" \
+            "$(jq -nc --arg type aborted-before-native --arg token "$token" \
+                --arg reason worker-identity-mismatch '{type:$type,token:$token,reason:$reason}')"
+        wait "$worker_pid" 2>/dev/null
+        exit 3
+    fi
+
+    _inject "before:native-release"
+    # Never grant release to a worker that has already died between its
+    # hello and this moment: that would mislabel a pre-release handshake
+    # death as a native command failure. Abort instead so the orchestrator
+    # starts a fresh tokenized attempt.
+    if ! _identity_alive "$wpid" "$wbirth"; then
+        _append_journal_records "$journal" \
+            "$(jq -nc --arg type aborted-before-native --arg token "$token" \
+                --arg reason worker-died-before-native-release '{type:$type,token:$token,reason:$reason}')"
+        exit 3
+    fi
+    _append_journal_records "$journal" \
+        "$(jq -nc --arg type native-launch --arg token "$token" --argjson pid "$wpid" '{type:$type,token:$token,pid:$pid}')" \
+        "$(jq -nc --arg type native-release --arg token "$token" '{type:$type,token:$token}')"
+    _inject "after:native-release"
+    _inject "supervisor-die-while-worker-continues"
+
+    wait "$worker_pid"
+    native_exit=$?
+
+    out_dir="$run_root/control/output"
+    base=$(basename -- "$journal")
+    base=${base%.ndjson}
+    stdout_path="$out_dir/$base.stdout"
+    stderr_path="$out_dir/$base.stderr"
+    [ -f "$stdout_path" ] || : >"$stdout_path"
+    [ -f "$stderr_path" ] || : >"$stderr_path"
+    stdout_hash=$(_sha256_file "$stdout_path")
+    stderr_hash=$(_sha256_file "$stderr_path")
+
+    _inject "before:terminal"
+    _append_journal_records "$journal" \
+        "$(jq -nc --arg type terminal --arg token "$token" --argjson exit "$native_exit" \
+            --arg so "$stdout_hash" --arg se "$stderr_hash" \
+            '{type:$type,token:$token,nativeExit:$exit,stdoutHash:$so,stderrHash:$se}')"
+    _inject "after:terminal"
+    exit 0
+}
+
+# ---------------------------------------------------------------------------
+# Mutation orchestration: intent -> handshake reconciliation -> applied
+# ---------------------------------------------------------------------------
+
+_abort_record() {
+    jq -nc --arg type aborted-before-native --arg token "$1" --arg reason "$2" \
+        '{type:$type,token:$token,reason:$reason}'
+}
+
+_quarantine_record() {
+    jq -nc --arg type quarantined --arg token "$1" --arg reason "$2" \
+        '{type:$type,token:$token,reason:$reason}'
+}
+
+_write_release_pair() {
+    local journal="$1" token="$2" launch_type="$3" release_type="$4" pid="$5"
+    _append_journal_records "$journal" \
+        "$(jq -nc --arg type "$launch_type" --arg token "$token" --argjson pid "$pid" '{type:$type,token:$token,pid:$pid}')" \
+        "$(jq -nc --arg type "$release_type" --arg token "$token" '{type:$type,token:$token}')"
+}
+
+# _start_attempt <run-root> <journal> <substep> <client> <opKey> <attempt>
+# Writes intent + pre-inventory, then spawns the supervisor in a fresh
+# process group. Never mutates anything: this is write-ahead only.
+_start_attempt() {
+    local run_root="$1" journal="$2" substep="$3" client="$4" opkey="$5" attempt="$6"
+    local token deadline_s deadline pre_inv pre_hash fixture argv_json argv_hash allowed sup_pid slug
+    token=$(_random_token) || _fail_unsafe "cannot mint a fresh attempt token"
+    _record_tokens "$run_root" "$token"
+    fixture=$(_load_fixture)
+    deadline_s=$(printf '%s' "$fixture" | jq -r '.handshakeTimeoutSeconds // empty')
+    [ -n "$deadline_s" ] || deadline_s=$DEFAULT_HANDSHAKE_TIMEOUT
+    [ -n "${LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS:-}" ] && deadline_s="$LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS"
+    deadline=$(($(date +%s) + deadline_s))
+
+    slug="$substep.$attempt"
+    pre_inv=$(_compute_inventory "$run_root")
+    pre_hash=$(_inventory_hash "$pre_inv")
+    _write_inventory "$run_root" "$slug" pre "$pre_inv"
+
+    argv_json=$(printf '%s' "$fixture" | jq -c --arg c "$client" --arg k "$opkey" --arg repo "$REPO_ROOT" --arg run "$run_root" \
+        '(.commands[$c][$k] // []) | map(gsub("\\$REPO_ROOT"; $repo) | gsub("\\$RUN_ROOT"; $run))')
+    argv_hash=$(_sha256_str "$(printf '%s' "$argv_json" | jq -Sc '.')")
+    allowed=$(_allowed_root_labels "$client")
+
+    _inject "before:intent"
+    _append_journal_records "$journal" \
+        "$(jq -nc --arg type intent --arg token "$token" --arg client "$client" --arg opKey "$opkey" \
+            --arg argvHash "$argv_hash" --arg pre "$pre_hash" --argjson deadline "$deadline" \
+            --argjson allowedRoots "$allowed" --arg postcondition "$(_postcondition_label "$opkey")" \
+            '{type:$type,token:$token,client:$client,opKey:$opKey,argvHash:$argvHash,preInventoryHash:$pre,handshakeDeadline:$deadline,allowedRoots:$allowedRoots,postcondition:$postcondition}')"
+    _inject "after:intent"
+
+    set -m
+    "$INTERPRETER" "$SELF" __supervisor "$run_root" "$journal" "$token" "$client" "$opkey" "$deadline" &
+    sup_pid=$!
+    # disown so bash's own job-control status-change notices (e.g. "Killed:
+    # 9") are never printed to our stderr -- this process's stdout/stderr
+    # is a stable, single-line contract callers parse.
+    disown "$sup_pid" 2>/dev/null || true
+    set +m
+    printf '%s\n' "$sup_pid" >"$journal.supervisor-pid" 2>/dev/null || true
+}
+
+# _reconcile_gate <run-root> <journal> <hello-type> <launch-type> <release-type> [normal-writer-hello-type]
+# Journal-driven, resume-safe reconciliation of ONE handshake gate. Prints
+# exactly one of: proceed | retry | quarantine.
+#
+# The gate-1 (supervisor) release is always written by the orchestrator
+# itself -- no sixth argument. The gate-2 (native) release is normally
+# written autonomously by the ALREADY-RUNNING supervisor process; passing
+# "supervisor-hello" as the sixth argument makes this function wait for
+# that live writer instead of racing it, and only step in as the writer
+# once that process is positively confirmed dead (a true resume case).
+_reconcile_gate() {
+    local run_root="$1" journal="$2" hello_type="$3" launch_type="$4" release_type="$5" writer_hello_type="${6:-}"
+    local intent token deadline hello pid birth
+    intent=$(_journal_record "$journal" intent)
+    token=$(printf '%s' "$intent" | jq -r '.token')
+    deadline=$(printf '%s' "$intent" | jq -r '.handshakeDeadline')
+
+    hello=$(_journal_record "$journal" "$hello_type")
+    if [ -z "$hello" ]; then
+        hello=$(_wait_for_record "$journal" "$hello_type" "$deadline") || {
+            # A gate-2 timeout races the already-running supervisor, which
+            # shares this same deadline: it legitimately appends its own
+            # abort record and exits. Let that recorded writer settle (die
+            # or abort) before judging, so its abort is honored exactly
+            # once and its still-exiting argv is not mistaken for an
+            # unverifiable live token holder.
+            if [ -n "$writer_hello_type" ]; then
+                local gw_hello gw_pid gw_birth gw_wait=0
+                gw_hello=$(_journal_record "$journal" "$writer_hello_type")
+                if [ -n "$gw_hello" ]; then
+                    gw_pid=$(printf '%s' "$gw_hello" | jq -r '.pid')
+                    gw_birth=$(printf '%s' "$gw_hello" | jq -r '.birth')
+                    while _identity_alive "$gw_pid" "$gw_birth" &&
+                        ! _journal_has "$journal" aborted-before-native &&
+                        [ "$gw_wait" -lt 100 ]; do
+                        sleep "$POLL_INTERVAL"
+                        gw_wait=$((gw_wait + 1))
+                    done
+                fi
+            fi
+            if _journal_has "$journal" aborted-before-native; then
+                printf 'retry\n'
+                return
+            fi
+            if _token_present_anywhere "$token"; then
+                printf 'quarantine\n'
+                return
+            fi
+            _append_journal_records "$journal" "$(_abort_record "$token" "no-$hello_type-before-deadline")"
+            printf 'retry\n'
+            return
+        }
+    fi
+
+    if _journal_has "$journal" "$release_type"; then
+        printf 'proceed\n'
+        return
+    fi
+
+    if [ -n "$writer_hello_type" ]; then
+        local writer_hello writer_pid writer_birth
+        writer_hello=$(_journal_record "$journal" "$writer_hello_type")
+        if [ -n "$writer_hello" ]; then
+            writer_pid=$(printf '%s' "$writer_hello" | jq -r '.pid')
+            writer_birth=$(printf '%s' "$writer_hello" | jq -r '.birth')
+            if _identity_alive "$writer_pid" "$writer_birth"; then
+                if _wait_for_record "$journal" "$release_type" "$deadline" >/dev/null; then
+                    printf 'proceed\n'
+                    return
+                fi
+                # The writer was alive through the whole deadline and still
+                # never released: do not race it or duplicate its write.
+                if _identity_alive "$writer_pid" "$writer_birth"; then
+                    printf 'quarantine\n'
+                    return
+                fi
+            fi
+        fi
+    fi
+
+    pid=$(printf '%s' "$hello" | jq -r '.pid')
+    birth=$(printf '%s' "$hello" | jq -r '.birth')
+    if _identity_alive "$pid" "$birth"; then
+        _write_release_pair "$journal" "$token" "$launch_type" "$release_type" "$pid"
+        printf 'proceed\n'
+        return
+    fi
+
+    if _journal_has "$journal" aborted-before-native; then
+        printf 'retry\n'
+        return
+    fi
+    if _token_present_anywhere "$token"; then
+        printf 'quarantine\n'
+        return
+    fi
+    _append_journal_records "$journal" "$(_abort_record "$token" "$hello_type-identity-died-before-$release_type")"
+    printf 'retry\n'
+}
+
+# _finish_mutation <run-root> <journal> — after both gates have released,
+# wait for (or reconcile the absence of) the terminal record. The DURABLE
+# SUPERVISOR -- not the (possibly already-exited) worker/native process --
+# is who writes terminal, so liveness is judged against the supervisor: a
+# fast client can legitimately finish (and its worker PID die) before the
+# still-alive supervisor gets to write terminal. Prints
+# applied | quarantine | reconcile-post-apply.
+_finish_mutation() {
+    local run_root="$1" journal="$2"
+    local sup_hello sup_pid sup_birth hello wpid wbirth token term waited=0
+    sup_hello=$(_journal_record "$journal" supervisor-hello)
+    sup_pid=$(printf '%s' "$sup_hello" | jq -r '.pid')
+    sup_birth=$(printf '%s' "$sup_hello" | jq -r '.birth')
+    hello=$(_journal_record "$journal" native-hello)
+    wpid=$(printf '%s' "$hello" | jq -r '.pid')
+    wbirth=$(printf '%s' "$hello" | jq -r '.birth')
+    token=$(printf '%s' "$hello" | jq -r '.token')
+
+    term=$(_journal_record "$journal" terminal)
+    while [ -z "$term" ] && _identity_alive "$sup_pid" "$sup_birth" && [ "$waited" -lt 6000 ]; do
+        sleep "$POLL_INTERVAL"
+        waited=$((waited + 1))
+        term=$(_journal_record "$journal" terminal)
+    done
+    # The loop can exit because the supervisor died in the exact race
+    # window between our last read and the liveness check right after it
+    # wrote terminal (a fast/instant kill leaves almost no gap). One final
+    # unconditional re-read closes that window before giving up on it.
+    [ -n "$term" ] || term=$(_journal_record "$journal" terminal)
+
+    if [ -n "$term" ]; then
+        printf 'applied\n'
+        return
+    fi
+
+    # The supervisor is gone (or a 300s safety cap elapsed) and never wrote
+    # terminal. Never relaunch: reconcile from the worker/native identity.
+    if _identity_alive "$wpid" "$wbirth"; then
+        printf 'quarantine\n'
+        return
+    fi
+    if _token_present_anywhere "$token"; then
+        printf 'quarantine\n'
+        return
+    fi
+    printf 'reconcile-post-apply\n'
+}
+
+# _apply_mutation_result <run-root> <journal> <client> <opKey> <mode>
+# mode is "applied" (a terminal record exists) or "reconcile-post-apply"
+# (the worker died without one; recover only if fully explainable).
+# Prints applied | quarantine | product-failure.
+_apply_mutation_result() {
+    local run_root="$1" journal="$2" client="$3" opkey="$4" mode="$5"
+    local intent token allowed_json post_inv post_hash slug pre_inv_json bad label
+    local postcondition_ok=1 term exit_code stdout_hash
+
+    intent=$(_journal_record "$journal" intent)
+    token=$(printf '%s' "$intent" | jq -r '.token')
+    allowed_json=$(printf '%s' "$intent" | jq -c '.allowedRoots')
+    slug=$(basename -- "$journal" .ndjson)
+
+    post_inv=$(_compute_inventory "$run_root")
+    post_hash=$(_inventory_hash "$post_inv")
+    _write_inventory "$run_root" "$slug" post "$post_inv"
+    pre_inv_json=$(cat -- "$run_root/control/inventory/$slug.pre.json" 2>/dev/null || printf '[]')
+
+    bad=""
+    while IFS= read -r label; do
+        [ -z "$label" ] && continue
+        printf '%s' "$allowed_json" | jq -e --arg l "$label" 'index($l) != null' >/dev/null 2>&1 || bad="$label"
+    done < <(_diff_inventory_roots "$pre_inv_json" "$post_inv")
+
+    _check_postcondition "$run_root" "$client" "$opkey" || postcondition_ok=0
+
+    if [ "$mode" = reconcile-post-apply ]; then
+        if [ -n "$bad" ] || [ "$postcondition_ok" -ne 1 ]; then
+            _append_journal_records "$journal" "$(_quarantine_record "$token" "post-apply reconciliation: unsatisfied postcondition or out-of-root diff")"
+            printf 'quarantine\n'
+            return
+        fi
+        _append_journal_records "$journal" \
+            "$(jq -nc --arg type recovered-after-apply --arg token "$token" '{type:$type,token:$token}')" \
+            "$(jq -nc --arg type applied --arg token "$token" --arg post "$post_hash" \
+                '{type:$type,token:$token,status:"recovered-after-apply",postInventoryHash:$post,outputHash:""}')"
+        printf 'applied\n'
+        return
+    fi
+
+    term=$(_journal_record "$journal" terminal)
+    exit_code=$(printf '%s' "$term" | jq -r '.nativeExit')
+    stdout_hash=$(printf '%s' "$term" | jq -r '.stdoutHash')
+
+    if [ -n "$bad" ]; then
+        _append_journal_records "$journal" "$(_quarantine_record "$token" "mutation touched a root outside the intent's allowed roots")"
+        printf 'quarantine\n'
+        return
+    fi
+    if [ "$exit_code" != "0" ] || [ "$postcondition_ok" -ne 1 ]; then
+        _append_journal_records "$journal" \
+            "$(jq -nc --arg type applied --arg token "$token" --arg post "$post_hash" --arg out "$stdout_hash" \
+                '{type:$type,token:$token,status:"failed",postInventoryHash:$post,outputHash:$out}')"
+        printf 'product-failure\n'
+        return
+    fi
+
+    _append_journal_records "$journal" \
+        "$(jq -nc --arg type applied --arg token "$token" --arg post "$post_hash" --arg out "$stdout_hash" \
+            '{type:$type,token:$token,status:"applied",postInventoryHash:$post,outputHash:$out}')"
+    printf 'applied\n'
+}
+
+# _do_mutation <run-root> <substep> <client> <opKey> — the sole entry point
+# for a native mutation; idempotent, resume-safe, never reuses an attempt.
+# Prints applied | quarantine | product-failure and sets $? accordingly
+# (0 | 3 | 5).
+# _do_mutation is called as a PLAIN STATEMENT (never inside a $(...))
+# because it is the frame that ultimately backgrounds the supervisor:
+# wrapping it in a command substitution would run that whole handshake
+# inside a throwaway subshell, which both defers this process's own
+# INT/TERM trap until that subshell exits AND has been observed to cut
+# short unrelated, independently-process-grouped descendants once the
+# subshell itself tears down. Communicates its result via the global
+# MUTATION_OUTCOME rather than stdout for exactly that reason.
+_do_mutation() {
+    local run_root="$1" substep="$2" client="$3" opkey="$4"
+    local attempt journal gate loop=0
+
+    attempt=$(_latest_attempt "$run_root" "$substep")
+    if [ "$attempt" -eq 0 ]; then
+        attempt=1
+        journal=$(_journal_path "$run_root" "$substep" "$attempt")
+        _start_attempt "$run_root" "$journal" "$substep" "$client" "$opkey" "$attempt"
+    else
+        journal=$(_journal_path "$run_root" "$substep" "$attempt")
+        if _journal_has "$journal" applied; then
+            MUTATION_OUTCOME=applied
+            return 0
+        fi
+        if _journal_has "$journal" quarantined; then
+            MUTATION_OUTCOME=quarantine
+            return 3
+        fi
+    fi
+
+    while [ "$loop" -lt "$MAX_ATTEMPTS" ]; do
+        loop=$((loop + 1))
+        journal=$(_journal_path "$run_root" "$substep" "$attempt")
+        [ -f "$journal" ] || _start_attempt "$run_root" "$journal" "$substep" "$client" "$opkey" "$attempt"
+
+        gate=$(_reconcile_gate "$run_root" "$journal" supervisor-hello supervisor-launch supervisor-release)
+        case "$gate" in
+        proceed) ;;
+        retry)
+            attempt=$((attempt + 1))
+            continue
+            ;;
+        quarantine)
+            MUTATION_OUTCOME=quarantine
+            return 3
+            ;;
+        esac
+
+        gate=$(_reconcile_gate "$run_root" "$journal" native-hello native-launch native-release supervisor-hello)
+        case "$gate" in
+        proceed) ;;
+        retry)
+            attempt=$((attempt + 1))
+            continue
+            ;;
+        quarantine)
+            MUTATION_OUTCOME=quarantine
+            return 3
+            ;;
+        esac
+
+        local finish_outcome apply_outcome
+        finish_outcome=$(_finish_mutation "$run_root" "$journal")
+        case "$finish_outcome" in
+        quarantine)
+            MUTATION_OUTCOME=quarantine
+            return 3
+            ;;
+        applied | reconcile-post-apply)
+            apply_outcome=$(_apply_mutation_result "$run_root" "$journal" "$client" "$opkey" "$finish_outcome")
+            case "$apply_outcome" in
+            applied)
+                MUTATION_OUTCOME=applied
+                return 0
+                ;;
+            quarantine)
+                MUTATION_OUTCOME=quarantine
+                return 3
+                ;;
+            product-failure)
+                MUTATION_OUTCOME=product-failure
+                return 5
+                ;;
+            esac
+            ;;
+        esac
+    done
+
+    MUTATION_OUTCOME=quarantine
+    return 3
+}
+
+# ---------------------------------------------------------------------------
+# --prepare
+# ---------------------------------------------------------------------------
+
+cmd_prepare() {
+    local dry=false arg tmp_base run_root marker candidate empty_inv empty_hash state
+    while [ "$#" -gt 0 ]; do
+        arg="$1"
+        case "$arg" in
+        --dry-fixture)
+            dry=true
+            shift
+            ;;
+        *) _usage ;;
+        esac
+    done
+
+    candidate=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null) || _fail_unsafe "cannot resolve the candidate commit"
+    # Check the LITERAL temp root for symlink-ness before canonicalizing:
+    # a canonicalized path is never a symlink, so checking afterwards
+    # would be a dead check. macOS always provides a real per-user
+    # TMPDIR; a symlinked override is refused, fail-closed.
+    [ ! -L "${TMPDIR:-/tmp}" ] || _fail_unsafe "system temp root is a symlink"
+    tmp_base=$(_canon_dir "${TMPDIR:-/tmp}") || _fail_unsafe "cannot canonicalize the system temp root"
+
+    run_root=$(mktemp -d "$tmp_base/loom-dogfood.XXXXXXXX") || _fail_unsafe "mktemp -d failed"
+    run_root=$(_validate_run_root "$run_root") || exit $?
+
+    marker=$(_random_token) || _fail_unsafe "cannot mint an owner marker"
+    _atomic_write "$run_root/marker" "$marker" || _fail_unsafe "cannot write the owner marker"
+
+    mkdir -p \
+        "$run_root/claude-home" "$run_root/codex-home" "$run_root/project" \
+        "$run_root/system-home" "$run_root/tmp" \
+        "$run_root/control/journal" "$run_root/control/inventory" "$run_root/control/output" ||
+        _fail_unsafe "cannot create owned roots"
+
+    empty_inv='[]'
+    empty_hash=$(_inventory_hash "$empty_inv")
+
+    state=$(jq -nc \
+        --arg schema loom-dogfood-state/v1 --arg runId "$marker" --arg marker "$marker" \
+        --arg candidate "$candidate" --argjson dry "$dry" --arg now "$(_now_iso)" \
+        --arg claudeHome "$run_root/claude-home" --arg codexHome "$run_root/codex-home" \
+        --arg project "$run_root/project" --arg systemHome "$run_root/system-home" --arg tmp "$run_root/tmp" \
+        --arg preHash "$empty_hash" \
+        '{schema:$schema,runId:$runId,marker:$marker,candidate:$candidate,dryFixture:$dry,
+          createdAt:$now,updatedAt:$now,phase:"prepared",substep:null,
+          roots:{claudeHome:$claudeHome,codexHome:$codexHome,project:$project,systemHome:$systemHome,tmp:$tmp},
+          preInventoryHash:$preHash,postInventoryHash:null,evidenceHash:null,quarantineReason:null}')
+    _atomic_write "$(_state_path "$run_root")" "$state" || _fail_unsafe "cannot write state.json"
+
+    printf '%s\n' "$run_root"
+}
+
+# ---------------------------------------------------------------------------
+# Common phase entry: validate containment/marker/candidate before any work.
+# ---------------------------------------------------------------------------
+
+_enter_phase() {
+    local raw="$1"
+    local run_root
+    run_root=$(_validate_run_root "$raw") || exit 3
+    _validate_marker "$run_root" >/dev/null
+    _validate_state_schema "$run_root"
+    printf '%s\n' "$run_root"
+}
+
+# __mutation <run-root> <substep> <client> <opKey> — public-but-internal
+# entry point for one native mutation; both --exercise/--uninstall and the
+# Bats injection matrix call this directly.
+cmd_run_mutation() {
+    [ "$#" -eq 4 ] || _usage
+    local run_root substep="$2" client="$3" opkey="$4" outcome status reason_json
+    run_root=$(_enter_phase "$1") || exit $?
+    _do_mutation "$run_root" "$substep" "$client" "$opkey"
+    status=$?
+    outcome="$MUTATION_OUTCOME"
+    case "$outcome" in
+    applied) ;;
+    quarantine)
+        reason_json=$(printf 'mutation quarantined: %s' "$substep" | jq -Rs '.')
+        _write_state "$run_root" ".phase=\"quarantined\" | .quarantineReason=$reason_json"
+        ;;
+    product-failure)
+        _write_state "$run_root" '.phase="failed"'
+        ;;
+    esac
+    printf '%s\n' "$outcome"
+    return "$status"
+}
+
+# ---------------------------------------------------------------------------
+# Infrastructure-block detection (usage limit / trust / model availability)
+# ---------------------------------------------------------------------------
+
+_infra_block_reason() {
+    local text="$1" marker
+    while IFS= read -r marker; do
+        [ -z "$marker" ] && continue
+        case "$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')" in
+        *"$marker"*)
+            printf '%s\n' "$marker"
+            return 0
+            ;;
+        esac
+    done <<EOF
+$INFRA_MARKERS
+EOF
+    return 1
+}
+
+# _mutation_output_text <run-root> <substep> — concatenated stdout+stderr of
+# the latest attempt, for infra-block classification.
+_mutation_output_text() {
+    local run_root="$1" substep="$2" attempt slug base
+    attempt=$(_latest_attempt "$run_root" "$substep")
+    [ "$attempt" -gt 0 ] || return 0
+    slug="$substep.$attempt"
+    base="$run_root/control/output/$slug"
+    cat -- "$base.stdout" "$base.stderr" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# Non-mutating probes (list/discovery, role launch, hook/trust observation)
+# ---------------------------------------------------------------------------
+
+# _probe_role_launch <run-root> <client> — a real cold-role-launch dry run
+# through the real loom-launch-role, proving delegation-free, bounded
+# configuration; Codex is stubbed under dry-fixture mode.
+_probe_role_launch() {
+    local run_root="$1" client="$2" launcher out status hash
+    launcher="$REPO_ROOT/plugins/loom/bin/loom-launch-role"
+    [ -x "$launcher" ] || {
+        printf 'no-launch-role\n0\n'
+        return
+    }
+    if [ "$client" = codex ]; then
+        out=$(LOOM_LAUNCH_ROLE_CODEX_BIN="${LOOM_DOGFOOD_CODEX_BIN:-codex}" "$INTERPRETER" "$launcher" codex researcher 2>&1)
+        status=$?
+    else
+        out=$("$INTERPRETER" "$launcher" claude researcher 2>&1)
+        status=$?
+    fi
+    hash=$(_sha256_str "$out")
+    printf '%s\n%s\n' "$hash" "$status"
+}
+
+# _probe_hook_trust <client> — runs the real repository hook against the
+# real, static hook-wire golden fixture (proves the shared manifest wires
+# and the executable resolves without touching the run's disposable roots).
+_probe_hook_trust() {
+    local client="$1" hook fixture_dir input out status
+    hook="$REPO_ROOT/plugins/loom/hooks/git-identity-guard.sh"
+    fixture_dir="$REPO_ROOT/plugins/loom/hooks/fixtures/hook-wire-v1/$client/pre-tool-use"
+    input="$fixture_dir/allow.input.json"
+    [ -x "$hook" ] && [ -f "$input" ] || {
+        printf 'not-observed\n0\n'
+        return
+    }
+    if [ "$client" = codex ]; then
+        out=$(PLUGIN_ROOT="$REPO_ROOT/plugins/loom" "$hook" <"$input" 2>&1)
+    else
+        out=$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT/plugins/loom" "$hook" <"$input" 2>&1)
+    fi
+    status=$?
+    printf 'observed\n%s\n' "$status"
+}
+
+# ---------------------------------------------------------------------------
+# --exercise / --uninstall / --clean
+# ---------------------------------------------------------------------------
+
+_run_client_sequence() {
+    local run_root="$1" client="$2" outcome reason
+
+    _do_mutation "$run_root" "$client-marketplace-add" "$client" marketplace-add
+    outcome="$MUTATION_OUTCOME"
+    [ "$outcome" = applied ] || {
+        reason=$(_infra_block_reason "$(_mutation_output_text "$run_root" "$client-marketplace-add")") && {
+            _write_state "$run_root" '.phase="infrastructure-blocked"'
+            _fail_infra "infrastructure block detected during $client marketplace add: $reason"
+        }
+        [ "$outcome" = quarantine ] && {
+            _write_state "$run_root" '.phase="quarantined"'
+            exit 3
+        }
+        _write_state "$run_root" '.phase="failed"'
+        _fail_product "$client marketplace add failed"
+    }
+
+    _do_mutation "$run_root" "$client-install" "$client" install
+    outcome="$MUTATION_OUTCOME"
+    [ "$outcome" = applied ] || {
+        reason=$(_infra_block_reason "$(_mutation_output_text "$run_root" "$client-install")") && {
+            _write_state "$run_root" '.phase="infrastructure-blocked"'
+            _fail_infra "infrastructure block detected during $client install: $reason"
+        }
+        [ "$outcome" = quarantine ] && {
+            _write_state "$run_root" '.phase="quarantined"'
+            exit 3
+        }
+        _write_state "$run_root" '.phase="failed"'
+        _fail_product "$client install failed"
+    }
+
+    _do_mutation "$run_root" "$client-install-2" "$client" install
+    outcome="$MUTATION_OUTCOME"
+    [ "$outcome" = applied ] || {
+        [ "$outcome" = quarantine ] && {
+            _write_state "$run_root" '.phase="quarantined"'
+            exit 3
+        }
+        _write_state "$run_root" '.phase="failed"'
+        _fail_product "$client reinstall failed"
+    }
+}
+
+cmd_exercise() {
+    local run_root client
+    run_root=$(_enter_phase "$1") || exit $?
+    _require_phase "$run_root" prepared installed
+
+    for client in claude codex; do
+        _run_client_sequence "$run_root" "$client"
+        _probe_role_launch "$run_root" "$client" >/dev/null
+        _probe_hook_trust "$client" >/dev/null
+    done
+
+    _write_state "$run_root" '.phase="exercised"'
+    _write_evidence "$run_root"
+}
+
+cmd_uninstall() {
+    local run_root client outcome
+    run_root=$(_enter_phase "$1") || exit $?
+    _require_phase "$run_root" exercised installed
+
+    for client in claude codex; do
+        _do_mutation "$run_root" "$client-uninstall" "$client" uninstall
+        outcome="$MUTATION_OUTCOME"
+        [ "$outcome" = applied ] || {
+            [ "$outcome" = quarantine ] && {
+                _write_state "$run_root" '.phase="quarantined"'
+                exit 3
+            }
+            _write_state "$run_root" '.phase="failed"'
+            _fail_product "$client uninstall failed"
+        }
+        _do_mutation "$run_root" "$client-marketplace-remove" "$client" marketplace-remove
+        outcome="$MUTATION_OUTCOME"
+        [ "$outcome" = applied ] || {
+            [ "$outcome" = quarantine ] && {
+                _write_state "$run_root" '.phase="quarantined"'
+                exit 3
+            }
+            _write_state "$run_root" '.phase="failed"'
+            _fail_product "$client marketplace remove failed"
+        }
+    done
+
+    # Zero-discovery/residue check: distinct from (and broader than) each
+    # uninstall mutation's own cache-absent postcondition -- nothing at all
+    # may remain under either client's owned plugins/ tree once both the
+    # uninstall and the marketplace-remove mutations report success.
+    local label plugins_root
+    for label in claude-home codex-home; do
+        plugins_root="$run_root/$label/plugins"
+        if [ -e "$plugins_root" ] && [ -n "$(find "$plugins_root" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+            _write_state "$run_root" '.phase="failed"'
+            _fail_residue "residue remains under $label/plugins after uninstall"
+        fi
+    done
+
+    _write_state "$run_root" '.phase="complete"'
+    _write_evidence "$run_root"
+}
+
+# ---------------------------------------------------------------------------
+# Evidence (canonical compact JSON, jq -S -c + one LF; $RUN_ROOT/$REPO_ROOT
+# redacted; bounded strings; no secret-shaped fields)
+# ---------------------------------------------------------------------------
+
+_write_evidence() {
+    local run_root="$1" state candidate marker phase harness_hash fixture_hash schema_hash
+    local tree evidence path redacted_root
+    state=$(_read_state "$run_root")
+    candidate=$(printf '%s' "$state" | jq -r '.candidate')
+    marker=$(printf '%s' "$state" | jq -r '.marker')
+    phase=$(printf '%s' "$state" | jq -r '.phase')
+    tree=$(git -C "$REPO_ROOT" rev-parse "$candidate^{tree}" 2>/dev/null || printf 'unknown')
+    harness_hash=$(_sha256_file "$SELF")
+    fixture_hash=$(_sha256_file "$FIXTURE_PATH")
+    schema_hash=$(_sha256_str "$(_sha256_file "$STATE_SCHEMA_PATH")$(_sha256_file "$EVIDENCE_SCHEMA_PATH")")
+    # shellcheck disable=SC2016
+    redacted_root='$RUN_ROOT'
+
+    local exit_code
+    case "$phase" in
+    complete) exit_code=0 ;;
+    quarantined) exit_code=3 ;;
+    infrastructure-blocked) exit_code=4 ;;
+    failed) exit_code=5 ;;
+    *) exit_code=0 ;;
+    esac
+
+    evidence=$(jq -nc \
+        --arg schema loom-dogfood-evidence/v1 --arg runId "$marker" --arg marker "$marker" \
+        --arg candidate "$candidate" --arg tree "$tree" --arg harness "$harness_hash" \
+        --arg fixture "$fixture_hash" --arg schemaHash "$schema_hash" \
+        --arg state "$phase" --argjson exit "$exit_code" --arg run "$redacted_root" \
+        '{schema:$schema,runId:$runId,marker:$marker,candidate:$candidate,tree:$tree,
+          harnessHash:$harness,fixtureHash:$fixture,schemaHash:$schemaHash,
+          platform:"darwin-arm64",clientFloors:{claude:"2.1.216",codex:"0.144.6"},
+          state:$state,exit:$exit,
+          roots:{claudeHome:$run+"/claude-home",codexHome:$run+"/codex-home",project:$run+"/project",systemHome:$run+"/system-home",tmp:$run+"/tmp"},
+          commands:[],preInventoryHash:"n/a",postInventoryHash:null,quarantineReason:null}')
+    path="$run_root/control/evidence.json"
+    _atomic_write "$path" "$(printf '%s' "$evidence" | jq -Sc '.')"$'\n'
+    _write_state "$run_root" ".evidenceHash=\"$(_sha256_file "$path")\""
+}
+
+# ---------------------------------------------------------------------------
+# --clean (the only recursive cleanup)
+# ---------------------------------------------------------------------------
+
+cmd_clean() {
+    local raw="$1" run_root phase f token receipt_dir receipt path
+
+    run_root=$(_validate_run_root "$raw") || exit 3
+    _validate_marker "$run_root" >/dev/null
+    _validate_state_schema "$run_root"
+
+    phase=$(_state_field "$run_root" phase)
+    case "$phase" in
+    idle | prepared | installed | exercised)
+        _fail_unsafe "cannot recursively clean an unresolved run (phase=$phase); resolve or quarantine first"
+        ;;
+    esac
+
+    # Refuse if any token this run ever minted is still live anywhere.
+    while IFS= read -r token; do
+        [ -z "$token" ] && continue
+        _token_present_anywhere "$token" && _fail_unsafe "a live token-bound process still exists for this run"
+    done < <(_all_tokens "$run_root")
+
+    # Refuse an unexpired handshake: any journal whose intent has no
+    # terminal/quarantined/aborted-before-native/applied outcome yet, and
+    # whose deadline has not yet passed.
+    for f in "$run_root"/control/journal/*.ndjson; do
+        [ -e "$f" ] || continue
+        if ! _journal_has "$f" applied && ! _journal_has "$f" quarantined && ! _journal_has "$f" aborted-before-native; then
+            local intent deadline now
+            intent=$(_journal_record "$f" intent)
+            deadline=$(printf '%s' "$intent" | jq -r '.handshakeDeadline // 0')
+            now=$(date +%s)
+            [ "$now" -ge "$deadline" ] || _fail_unsafe "an unexpired handshake exists: $(basename -- "$f")"
+        fi
+    done
+
+    if [ "$phase" = quarantined ]; then
+        local inv
+        inv=$(_compute_inventory "$run_root")
+        printf '%s' "$inv" | jq -e '. != null' >/dev/null 2>&1 || _fail_unsafe "cannot prove a complete inventory for a quarantined run"
+    fi
+
+    receipt_dir="$(_git_common_dir)/loom/dogfood/receipts"
+    mkdir -p "$receipt_dir" || _fail_unsafe "cannot create the untracked quarantine-receipt directory"
+    receipt=$(jq -nc \
+        --arg runId "$(_state_field "$run_root" runId)" --arg marker "$(_state_field "$run_root" marker)" \
+        --arg phase "$phase" --arg now "$(_now_iso)" \
+        --arg finalInventoryHash "$(_inventory_hash "$(_compute_inventory "$run_root")")" \
+        --arg evidenceHash "$(_state_field "$run_root" evidenceHash)" \
+        '{schema:"loom-dogfood-receipt/v1",runId:$runId,marker:$marker,finalPhase:$phase,finishedAt:$now,finalInventoryHash:$finalInventoryHash,evidenceHash:$evidenceHash}')
+    path="$receipt_dir/$(_state_field "$run_root" runId).json"
+    _atomic_write "$path" "$(printf '%s' "$receipt" | jq -Sc '.')"$'\n' || _fail_unsafe "cannot write the quarantine/cleanup receipt"
+
+    rm -rf -- "$run_root" || _fail_unsafe "recursive cleanup failed"
+}
+
+# Stable interruption contract (plan Step 10): INT exits 130, TERM exits
+# 143. The trap fires once the current foreground step completes; resume
+# then reconciles from the journal on the next invocation.
+_interrupted() {
+    trap - INT TERM
+    exit "$1"
+}
+trap '_interrupted 130' INT
+trap '_interrupted 143' TERM
+
+main() {
+    local mode="${1:-}"
+    case "$mode" in
+    --prepare)
+        shift
+        cmd_prepare "$@"
+        ;;
+    --exercise)
+        shift
+        [ "$#" -eq 1 ] || _usage
+        cmd_exercise "$1"
+        ;;
+    --uninstall)
+        shift
+        [ "$#" -eq 1 ] || _usage
+        cmd_uninstall "$1"
+        ;;
+    --clean)
+        shift
+        [ "$#" -eq 1 ] || _usage
+        cmd_clean "$1"
+        ;;
+    __mutation)
+        shift
+        cmd_run_mutation "$@"
+        ;;
+    __supervisor)
+        shift
+        run_supervisor "$@"
+        ;;
+    __worker)
+        shift
+        run_worker "$@"
+        ;;
+    *)
+        _usage
+        ;;
+    esac
+}
+
+main "$@"
