@@ -16,6 +16,23 @@ source of truth; `roadmap.md` is milestone order.
 
 ## Where things stand
 
+- **Owner decisions 2026-07-24 (governance deferred-decisions resolved) + M1 planning
+  started.** Two owner decisions are recorded (details in `progress.md` → Current
+  state / M0 errata): (1) **SCHEDULE `client-floor-adapter-smoke`, do not retire** —
+  it is already an ADR 0023 §1 authorized M0 follow-up, so scheduling it needs **no
+  new ADR**; the improvement plan now carries a restored `### Slice:
+  client-floor-adapter-smoke` under M0 stating what it owes beyond the dogfood
+  evidence (a **real authenticated Codex cold role launch** — the D0-blocked leg —
+  plus the §7 cross-client floor checks) with an **open owner-input precondition: the
+  Codex credential strategy for isolated homes** (short-lived injected credential vs.
+  read-only sandboxed real `CODEX_HOME`; owner picks at plan time). (2)
+  `loom/bootstrap-authority-b28a747` remote branch **DELETED** after the zero-reference
+  scan. The governance slice's other deferred item (ADR 0023 §7 single-session
+  publication precondition / M2 duplication) stays deferred to M2 planning.
+  **M1 planning underway:** the `coord-identifier-boundaries` slice-plan is authored at
+  `Status: Plan Review` (`.docs/slice-plans/coord-identifier-boundaries.md`) — a
+  code-bearing bootstrap slice; next action is a cold ADR 0023 bootstrap plan
+  evaluation.
 - **`macos-dual-client-dogfood` is complete and slice-plan-archived, pending ADR-0023
   publication settlement — this is the next action.** Resolving code-eval PASS round 0
   (head `a000cef`) after a bootstrap `/code-review` FAIL round 0 (dogfood-harness

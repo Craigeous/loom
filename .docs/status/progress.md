@@ -6,6 +6,30 @@ The status source of truth and decision index for building loom.
 
 ## Current state
 
+- **Last action (owner decisions, 2026-07-24 — governance deferred-decisions
+  resolved).** Two owner decisions were recorded and the governance slice's two
+  deferred owner questions are now settled:
+  1. **SCHEDULE `client-floor-adapter-smoke` (do not retire).** ADR 0023 §1 already
+     authorizes it as `ci-baseline`'s required M0 follow-up (and §7 grants it
+     bootstrap `remote-direct` landing); it remains in the transition
+     `allowed_slices`. Scheduling it restores the plan text to match existing
+     authority, so **no new ADR is needed** — in contrast to the rejected retirement
+     the governance draft attempted, which would have required an accepted ADR. The
+     improvement plan now carries a restored `### Slice: client-floor-adapter-smoke`
+     entry under M0 (the remaining M0 follow-up, scheduled after governance, runnable
+     before or alongside M1) stating what it owes beyond the dogfood evidence: a
+     **real authenticated Codex cold role launch** (the leg the D0 dogfood run could
+     not prove — its isolated `CODEX_HOME` was credential-less by design) plus the
+     §7 cross-client floor checks, with an **open owner-input precondition on the
+     Codex credential strategy** for isolated homes (short-lived injected credential
+     vs. read-only sandboxed real `CODEX_HOME`; owner picks at plan time).
+  2. **`loom/bootstrap-authority-b28a747` remote branch DELETED** after the
+     zero-reference scan (see M0 errata → Branch/PR hygiene).
+  The governance slice's second deferred item — the ADR 0023 §7 single-session
+  publication precondition / M2 duplication — is **not** part of these decisions and
+  remains deferred to M2 planning, as the governance plan noted.
+- **Next action:** plan the M1 `coord-identifier-boundaries` slice (first coordinator
+  safety slice; centralized identifier validation for `plugins/loom/bin/loom-coord`).
 - **Phase:** **Private Apple-silicon dual-client dogfood checkpoint reached.**
   `macos-dual-client-dogfood` is `Ready to Publish` (resolving code-eval PASS round
   0, archived) pending the protected ADR-0023 intent/receipt/settlement sequence,
@@ -610,13 +634,16 @@ package the program otherwise expects.
 
 **Branch/PR hygiene (performed 2026-07-24).** PR #1 and PR #2 were closed and four
 redundant remote branches were deleted on 2026-07-24. A fifth candidate,
-`loom/bootstrap-authority-b28a747`, was scanned rather than deleted: it still exists on
-the remote (`git ls-remote --heads origin loom/bootstrap-authority-b28a747` →
-`b28a747…`), and a reference scan (`git grep -n bootstrap-authority-b28a747` over
-`.docs/`, plus a full scan of the protected transition `state.json` history at
-`origin/loom/bootstrap-transition` tip `32c5315`) found **zero** anchoring references —
-no living-doc, evaluation, or transition-state record depends on it. The keep-vs-delete
-decision is left to the owner; this slice does not delete the branch.
+`loom/bootstrap-authority-b28a747`, was scanned rather than deleted at that time: it
+still existed on the remote (`git ls-remote --heads origin
+loom/bootstrap-authority-b28a747` → `b28a747…`), and a reference scan (`git grep -n
+bootstrap-authority-b28a747` over `.docs/`, plus a full scan of the protected
+transition `state.json` history at `origin/loom/bootstrap-transition` tip `32c5315`)
+found **zero** anchoring references — no living-doc, evaluation, or transition-state
+record depended on it. **Owner decision (2026-07-24): DELETE.** On the strength of
+that zero-reference scan the owner directed deletion of
+`loom/bootstrap-authority-b28a747`; the remote branch is deleted. This closes the
+keep-vs-delete question the governance slice deferred to the owner.
 
 ## Accepted decisions (ADRs)
 

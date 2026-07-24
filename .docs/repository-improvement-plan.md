@@ -34,7 +34,7 @@ combine coordinator concurrency changes with review-pipeline work.
 
 ---
 
-## M0 — Establish a trustworthy baseline (Landed)
+## M0 — Establish a trustworthy baseline (baseline landed; one follow-up scheduled)
 
 Purpose: make every subsequent change reproducibly testable.
 
@@ -72,6 +72,65 @@ Explicitly document whether Windows or Git Bash is supported.
 - A fresh clone can run one documented command and reproduce the full gate.
 - CI runs on both supported operating systems.
 - Tool versions and installation steps are pinned or reproducible.
+
+### Slice: `client-floor-adapter-smoke`
+
+The remaining M0 follow-up. ADR 0023 §1 lists it as `ci-baseline`'s required
+follow-up slice, and §7 grants it bootstrap `remote-direct` landing; it is not
+retired. Scheduled after the `governance-baseline-reconciliation` record-keeping
+slice per the owner decision of 2026-07-24, and runnable before or alongside M1.
+This is a **code-bearing bootstrap slice**, so ADR 0023 sealed-package review — the
+§3 three cold auxiliary finders (correctness, tests, security) plus the §4
+independent evaluator, both on the exact committed `base..head` — applies at
+`Implemented`; a `bootstrap-landing` publication follows §7 while the transition
+state lists the slice.
+
+Purpose: supply the exact-floor live-client evidence `ci-baseline` explicitly
+deferred (clean install/loading, explicit invocation, cold-role non-delegation,
+hook fixtures/trust, absolute installed-root helper resolution, uninstall — for both
+pinned floor clients in isolated homes) and the one leg the Apple-silicon
+dual-client dogfood (Checkpoint D0) could not fully prove. The dogfood run already
+delivered the shared workflow/role/hook/helper adapters and completed the full
+native marketplace-add / install / reinstall / uninstall / marketplace-remove
+lifecycle plus a real **Claude** cold role launch in isolated homes on Darwin
+`arm64`; its **Codex** cold role-launch leg was recorded `infrastructure-blocked` —
+a live `401` from a by-design credential-less isolated `CODEX_HOME`, not a product
+defect.
+
+What this slice owes beyond the dogfood evidence:
+
+- A **real authenticated Codex cold role launch** — the exact leg the dogfood run
+  could not prove — demonstrating that a non-delegating cold role invocation
+  completes on the pinned Codex floor.
+- The minimal cross-client floor checks ADR 0023 §7 assigns it: for **both** exact
+  floor clients in isolated homes, clean marketplace/plugin loading, explicit
+  invocation, cold-role non-delegation, hook fixtures/trust behavior, absolute
+  installed-root helper resolution, and clean uninstall — reusing, not re-deriving,
+  the dogfood harness where it already proves a leg for a client.
+
+**Open question — owner input required at plan time: Codex credential strategy for
+isolated homes.** The dogfood run kept `CODEX_HOME` credential-less by design, so a
+live authenticated launch needs a credential decision. Options (owner picks one
+before this slice is planned):
+
+1. Inject a **short-lived real credential** into the isolated `CODEX_HOME` for
+   exactly one launch, then discard it (preserves home isolation; scopes credential
+   exposure to a single run).
+2. Run against the **owner's real `CODEX_HOME` read-only / sandboxed** (uses existing
+   auth; must guarantee no mutation of the owner's home).
+
+No credential material is committed to the repository or any bootstrap evidence
+package (ADR 0023 §2 excludes credentials from the package).
+
+#### Acceptance criteria
+
+- A real authenticated Codex cold role launch completes non-delegating on the pinned
+  Codex floor, evidenced under the owner-chosen credential strategy.
+- Both exact floor clients pass the §7 install / invocation / cold-role / hook /
+  helper / uninstall floor checks in isolated homes.
+- No credential material enters the repository or the bootstrap evidence package.
+- The slice stays scoped to floor smoke evidence: it does not reduce the mandatory
+  Linux/macOS-Intel v0.2 release obligations and does not claim public Codex support.
 
 ---
 

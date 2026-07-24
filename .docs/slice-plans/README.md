@@ -17,13 +17,8 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-- [governance-baseline-reconciliation.md](governance-baseline-reconciliation.md) —
-  `Implemented` — record-keeping-only reconciliation of the M0 record: an "M0 errata"
-  subsection in `progress.md` (four early-stretch process deviations) + pointer in
-  `evaluations/README.md`; precise "M0 Landed" scope in `roadmap.md`/`progress.md`;
-  branch/PR hygiene record + the mechanical `loom/bootstrap-authority-b28a747`
-  reference scan (zero anchoring references found; keep-vs-delete left to the owner).
-  No spec/ADR edits, no transition-state mutation, no remote-ref operations.
+_None in flight._ (The `governance-baseline-reconciliation` plan landed and is now
+under Archived plans below.)
 
 ## Archived plans
 
