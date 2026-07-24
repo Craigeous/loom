@@ -1084,12 +1084,17 @@ EOF
 # T3 — wt_sid_match: backslash in session-id not mangled by awk ENVIRON
 # ---------------------------------------------------------------------------
 
-@test "T3 wt_sid_match: backslash-n in session-id not mangled (awk -v vs ENVIRON)" {
+@test "T3 wt_sid_match: backslash-n decoded sid is quarantined (malformed persisted state)" {
     # awk -v sid="foo\nbar" interprets \n as a newline → comparison fails.
-    # awk ENVIRON["LOOM_SID"] delivers the value byte-for-byte → comparison correct.
-    # Test: cleanup with stale-lease claim where sid contains '\n' (literal backslash-n).
-    # With T3 bug: wt_sid_match returns empty → orphan worktree NOT removed.
-    # With T3 fix: wt_sid_match returns the path  → orphan worktree IS removed.
+    # awk ENVIRON["LOOM_SID"] delivers the value byte-for-byte → comparison correct
+    # (that part of the T3 fix is unchanged).  M1 (coord-identifier-boundaries) adds
+    # centralized decoded-sid validation: a decoded sid containing a literal
+    # backslash is outside _valid_identifier's grammar, so it is now malformed
+    # persisted state.  cleanup quarantines it (skipped, ref + worktree preserved)
+    # rather than acting on it — the fail-closed choice — instead of the pre-M1
+    # sweep-and-remove-worktree behavior.  Kept as the load-bearing negative for the
+    # decoded-blob path (plan Notes: intentional, authorized change, not silent
+    # test-weakening).
     make_repo
     cd "$REPO"
 
@@ -1105,10 +1110,11 @@ EOF
 
     run env LOOM_LOCK_TTL=0 LOOM_HOLDERLESS_TTL=0 LOOM_LEASE_TTL=0 "$LOOM_TEST_BASH" "$COORD" cleanup
     [ "$status" -eq 0 ]
-    [[ "$output" == *"swept 1"* ]]
-    [ -z "$(claim_ref_sha "slice-T3")" ]
-    # Orphan worktree must have been removed (requires correct wt_sid_match)
-    [ ! -d "$wt_path" ]
+    [[ "$output" == *"skipped 1"* ]]
+    [[ "$output" != *"swept 1"* ]]
+    # Quarantined: claim ref preserved, orphan worktree preserved (not removed).
+    [ -n "$(claim_ref_sha "slice-T3")" ]
+    [ -d "$wt_path" ]
     teardown
 }
 
@@ -1808,4 +1814,232 @@ HOOK
     local naive
     naive=$(printf '%s\n' "$stat_line" | awk '{print $22}')
     [ "$naive" != "99999" ]
+}
+
+# ---------------------------------------------------------------------------
+# NEG-ID — coord-identifier-boundaries (M1): centralized identifier validation
+# ---------------------------------------------------------------------------
+
+@test "NEG-ID1 session-id traversal 'x/../../victim': exit 1, no dir created outside STATE_DIR" {
+    make_repo
+    cd "$REPO"
+    local victim
+    victim="$REPO/.git/victim"
+    run "$LOOM_TEST_BASH" "$COORD" session-start --session 'x/../../victim'
+    [ "$status" -eq 1 ]
+    [ ! -e "$victim" ]
+    teardown
+}
+
+@test "NEG-ID2 absolute session id: exit 1, no out-of-tree dir created" {
+    make_repo
+    cd "$REPO"
+    local victim
+    victim="/tmp/loom-abs-victim-$$"
+    rm -rf "$victim"
+    run "$LOOM_TEST_BASH" "$COORD" session-start --session "$victim"
+    [ "$status" -eq 1 ]
+    [ ! -e "$victim" ]
+    teardown
+}
+
+@test "NEG-ID3 empty session id: exit 1 (regression: assert_session)" {
+    make_repo
+    cd "$REPO"
+    run "$LOOM_TEST_BASH" "$COORD" lock-acquire --session ""
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID3b overlong (129-char) session id: exit 1" {
+    make_repo
+    cd "$REPO"
+    local long_id i
+    long_id="a"
+    i=0
+    while [ "$i" -lt 128 ]; do
+        long_id="${long_id}a"
+        i=$((i + 1))
+    done
+    [ "${#long_id}" -eq 129 ]
+    run "$LOOM_TEST_BASH" "$COORD" lock-acquire --session "$long_id"
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID4 session id containing a literal tab: exit 1" {
+    make_repo
+    cd "$REPO"
+    run "$LOOM_TEST_BASH" "$COORD" lock-acquire --session $'foo\tbar'
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID4b session id containing a real newline: exit 1" {
+    make_repo
+    cd "$REPO"
+    run "$LOOM_TEST_BASH" "$COORD" lock-acquire --session $'foo\nbar'
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID5 session id containing Unicode U+2044 (fraction slash): exit 1" {
+    make_repo
+    cd "$REPO"
+    run "$LOOM_TEST_BASH" "$COORD" lock-acquire --session $'foo\xe2\x81\x84bar'
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID5b session id containing Unicode U+2215 (division slash): exit 1" {
+    make_repo
+    cd "$REPO"
+    run "$LOOM_TEST_BASH" "$COORD" lock-acquire --session $'foo\xe2\x88\x95bar'
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID6 cleanup: malformed decoded sid (traversal string) is quarantined, not swept" {
+    make_repo
+    cd "$REPO"
+    local sid victim
+    sid='../../../../tmp/loom-cleanup-victim'
+    victim="$REPO/tmp/loom-cleanup-victim"
+    mkdir -p "$victim"
+
+    plant_claim_ref "slice-ID6" "$sid" "0"
+
+    run env LOOM_LOCK_RETRIES=3 LOOM_LEASE_TTL=0 "$LOOM_TEST_BASH" "$COORD" cleanup
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"skipped 1"* ]]
+    [[ "$output" != *"swept 1"* ]]
+    # Sentinel target of the naïve traversal is untouched.
+    [ -d "$victim" ]
+    # Malformed row preserved, not delete-CAS'd.
+    [ -n "$(claim_ref_sha "slice-ID6")" ]
+    teardown
+}
+
+@test "NEG-ID6b reclaim: malformed decoded sid does not drive worktree removal outside the tree" {
+    make_repo
+    cd "$REPO"
+    local bad_sid wt_path
+    bad_sid='a..b'
+    wt_path="$(cd "$REPO/.." && pwd)/wt-${bad_sid}"
+    git -C "$REPO" worktree add -q "$wt_path" HEAD
+
+    plant_claim_ref "slice-ID6b" "$bad_sid" "0"
+
+    run env LOOM_LOCK_RETRIES=3 "$LOOM_TEST_BASH" "$COORD" lock-acquire --session "ses-us-ID6b"
+    [ "$status" -eq 0 ]
+
+    run "$LOOM_TEST_BASH" "$COORD" reclaim slice-ID6b --session "ses-us-ID6b"
+    [ "$status" -eq 0 ]
+    [ "$(claim_sid "slice-ID6b")" = "ses-us-ID6b" ]
+    # Worktree removal is gated on decoded-sid validity: "a..b" is invalid, so the
+    # worktree must survive even though the ref-hash-keyed CAS steal succeeded.
+    [ -d "$wt_path" ]
+    teardown
+}
+
+@test "NEG-ID7 claim rejects a slice name containing a newline: exit 1" {
+    make_repo
+    cd "$REPO"
+    run env LOOM_LOCK_RETRIES=3 "$LOOM_TEST_BASH" "$COORD" lock-acquire --session "ses-ID7"
+    [ "$status" -eq 0 ]
+    run "$LOOM_TEST_BASH" "$COORD" claim $'slice\nname' --session "ses-ID7"
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID7b claim rejects a slice name containing a tab: exit 1" {
+    make_repo
+    cd "$REPO"
+    run env LOOM_LOCK_RETRIES=3 "$LOOM_TEST_BASH" "$COORD" lock-acquire --session "ses-ID7b"
+    [ "$status" -eq 0 ]
+    run "$LOOM_TEST_BASH" "$COORD" claim $'slice\tname' --session "ses-ID7b"
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID7c renew rejects a slice name containing a control byte: exit 1" {
+    make_repo
+    cd "$REPO"
+    run env LOOM_LOCK_RETRIES=3 "$LOOM_TEST_BASH" "$COORD" lock-acquire --session "ses-ID7c"
+    [ "$status" -eq 0 ]
+    run "$LOOM_TEST_BASH" "$COORD" renew $'slice\x01name' --session "ses-ID7c"
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID7d claim with empty slice name: exit 1 (regression)" {
+    make_repo
+    cd "$REPO"
+    run env LOOM_LOCK_RETRIES=3 "$LOOM_TEST_BASH" "$COORD" lock-acquire --session "ses-ID7d"
+    [ "$status" -eq 0 ]
+    run "$LOOM_TEST_BASH" "$COORD" claim "" --session "ses-ID7d"
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID7e claim succeeds with slice names containing '/', ':', or '..' (V5/V6 capability preserved)" {
+    make_repo
+    cd "$REPO"
+    run env LOOM_LOCK_RETRIES=3 "$LOOM_TEST_BASH" "$COORD" lock-acquire --session "ses-ID7e"
+    [ "$status" -eq 0 ]
+
+    run "$LOOM_TEST_BASH" "$COORD" claim "a/b" --session "ses-ID7e"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"claimed a/b"* ]]
+
+    run "$LOOM_TEST_BASH" "$COORD" claim "slice:foo" --session "ses-ID7e"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"claimed slice:foo"* ]]
+
+    run "$LOOM_TEST_BASH" "$COORD" claim "a..b" --session "ses-ID7e"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"claimed a..b"* ]]
+    teardown
+}
+
+@test "NEG-ID8 renewer-start rejects a non-numeric pid: exit 1" {
+    make_repo
+    cd "$REPO"
+    run "$LOOM_TEST_BASH" "$COORD" session-start --session "ses-ID8"
+    [ "$status" -eq 0 ]
+    run "$LOOM_TEST_BASH" "$COORD" renewer-start "1;rm" --session "ses-ID8"
+    [ "$status" -eq 1 ]
+    teardown
+}
+
+@test "NEG-ID9 session-end removes known files and the (now-empty) session dir" {
+    make_repo
+    cd "$REPO"
+    run "$LOOM_TEST_BASH" "$COORD" session-start --session "ses-ID9"
+    [ "$status" -eq 0 ]
+    local sess_dir
+    sess_dir="$(state_dir)/session-ses-ID9"
+    [ -d "$sess_dir" ]
+
+    run "$LOOM_TEST_BASH" "$COORD" session-end --session "ses-ID9"
+    [ "$status" -eq 0 ]
+    [ ! -d "$sess_dir" ]
+    teardown
+}
+
+@test "NEG-ID9b session-end quarantines a session dir holding an unexpected file (rmdir refuses non-empty)" {
+    make_repo
+    cd "$REPO"
+    run "$LOOM_TEST_BASH" "$COORD" session-start --session "ses-ID9b"
+    [ "$status" -eq 0 ]
+    local sess_dir unexpected
+    sess_dir="$(state_dir)/session-ses-ID9b"
+    unexpected="$sess_dir/unexpected-file"
+    : >"$unexpected"
+
+    run "$LOOM_TEST_BASH" "$COORD" session-end --session "ses-ID9b"
+    [ "$status" -eq 0 ]
+    [ -d "$sess_dir" ]
+    [ -f "$unexpected" ]
+    teardown
 }

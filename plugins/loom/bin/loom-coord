@@ -178,6 +178,96 @@ now() {
     date +%s 2>/dev/null
 }
 
+# _valid_identifier <value> — returns 0 iff <value> matches the safe grammar
+#   [A-Za-z0-9][A-Za-z0-9._-]{0,127}  AND contains no ".." substring.
+# Bash 3.2 / BSD safe: pure case-glob + ${#}.  The single [!A-Za-z0-9._-]
+# rejection covers "/", spaces, tabs, newlines, control bytes, and every
+# multibyte Unicode separator (their bytes fall outside the allowed set).
+#
+# This is the grammar for identifiers that form paths, refs, or process
+# arguments — session ids (user-supplied and decoded-from-blob) and, via
+# validate_pid, PIDs.  It is NOT applied to slice names (see below).
+_valid_identifier() {
+    local v="$1"
+    [ -n "$v" ] || return 1                      # empty
+    [ "${#v}" -le 128 ] || return 1              # overlong (1 + up to 127)
+    case "$v" in [!A-Za-z0-9]*) return 1 ;; esac # leading char must be alnum
+    case "$v" in
+    *[!A-Za-z0-9._-]*) return 1 ;; # any byte outside the allowed set
+    *..*) return 1 ;;              # explicit ".." reject (literal M1 requirement)
+    esac
+    return 0
+}
+
+# _valid_slice_name <value> — returns 0 iff <value> is a legal held-claims record:
+#   non-empty AND contains no newline, tab, or other control byte.
+#   Slice names are hash-consumed for the ref (V5) and base64'd into the blob (W2),
+#   so ":" and ".." are SAFE and must remain claimable (SC1, V5b, V5/V6 capability).
+#   The ONLY invariant to protect is the session-<id>/held-claims one-record-per-line
+#   format, which control bytes (esp. newline/tab) would corrupt.
+# Bash 3.2 / BSD safe: pure case-glob with the POSIX [[:cntrl:]] class.
+_valid_slice_name() {
+    local v="$1"
+    [ -n "$v" ] || return 1                      # empty
+    case "$v" in *[[:cntrl:]]*) return 1 ;; esac # newline, tab, any control byte
+    return 0
+}
+
+# validate_session_id <value> — exit 1 with a usage message unless _valid_identifier.
+validate_session_id() {
+    if ! _valid_identifier "$1"; then
+        printf 'loom-coord %s: invalid session id (expected [A-Za-z0-9][A-Za-z0-9._-]{0,127}, no "..")\n' "$SUBCOMMAND" >&2
+        exit 1
+    fi
+}
+
+# validate_slice_name <value> — exit 1 with a usage message unless _valid_slice_name.
+validate_slice_name() {
+    if ! _valid_slice_name "$1"; then
+        printf 'loom-coord %s: invalid slice name (must be non-empty with no newline/tab/control bytes)\n' "$SUBCOMMAND" >&2
+        exit 1
+    fi
+}
+
+# validate_pid <value> — exit 1 with a usage message unless <value> is digits-only.
+validate_pid() {
+    case "$1" in
+    '' | *[!0-9]*)
+        printf 'loom-coord %s: invalid pid (expected digits)\n' "$SUBCOMMAND" >&2
+        exit 1
+        ;;
+    esac
+    [ "${#1}" -le 20 ] || {
+        printf 'loom-coord %s: pid too long\n' "$SUBCOMMAND" >&2
+        exit 1
+    }
+}
+
+# _assert_state_path <path> — 0 iff <path> is textually rooted at "$STATE_DIR/".
+# Secondary guard; the identifier grammar (no "/", no "..") is the primary
+# containment guarantee.
+_assert_state_path() {
+    case "$1" in "$STATE_DIR"/*) return 0 ;; esac
+    return 1
+}
+
+# _remove_session_dir <sid> — remove a session dir by deleting KNOWN files then
+# rmdir (replaces "rm -rf" of a computed path).  No-op (quarantine) on an invalid
+# sid or a target not rooted at STATE_DIR.  rmdir leaves the dir intact if
+# unexpected files remain — quarantining malformed state instead of force-deleting.
+_remove_session_dir() {
+    local sid="$1" d
+    _valid_identifier "$sid" || return 1
+    d="$STATE_DIR/session-$sid"
+    _assert_state_path "$d" || return 1
+    rm -f "$d/checkpoint" "$d/held-claims" \
+        "$d/session.pid" "$d/session.starttime" \
+        "$d/renewer.pid" "$d/renewer.starttime" 2>/dev/null || true
+    rm -f "$d"/*.tmp.* 2>/dev/null || true # atomic-write temp files (known pattern)
+    rmdir "$d" 2>/dev/null || true
+    return 0
+}
+
 # _check_or_set_schema — verify refs/loom/schema matches SCHEMA_VERSION (W3 fix).
 # Fail-closed (exit 10) when a different version is found, so a concurrently-running
 # old or new incompatible invocation is detected before any mutation occurs.
@@ -420,6 +510,7 @@ assert_session() {
         printf 'loom-coord %s: --session <id> required (or LOOM_SESSION_ID)\n' "$SUBCOMMAND" >&2
         exit 1
     fi
+    validate_session_id "$SESSION_ID"
 }
 
 # assert_lock_held — exit 5 if caller does not hold the lock
@@ -576,6 +667,7 @@ cmd_claim() {
         printf 'loom-coord claim: slice name required\n' >&2
         exit 1
     fi
+    validate_slice_name "$slice"
 
     # Check-then-act under the held lock; CAS on the claim ref provides extra safety.
     local _ref cur_sha cur_sid cur_ts new_sha
@@ -640,6 +732,7 @@ cmd_renew() {
         printf 'loom-coord renew: slice name required\n' >&2
         exit 1
     fi
+    validate_slice_name "$slice"
 
     local _ref cur_sha cur_sid new_sha
     _ref=$(claim_ref_for "$slice")
@@ -679,6 +772,7 @@ cmd_release_claim() {
         printf 'loom-coord release-claim: slice name required\n' >&2
         exit 1
     fi
+    validate_slice_name "$slice"
 
     local _ref cur_sha cur_sid
     _ref=$(claim_ref_for "$slice")
@@ -707,6 +801,7 @@ cmd_reclaim() {
         printf 'loom-coord reclaim: slice name required\n' >&2
         exit 1
     fi
+    validate_slice_name "$slice"
 
     local _ref cur_sha cur_sid cur_ts new_sha
     _ref=$(claim_ref_for "$slice")
@@ -746,10 +841,12 @@ cmd_reclaim() {
     fi
     # CAS succeeded — orphan worktree cleanup is now safe
     git -C "$REPO_ROOT" worktree prune 2>/dev/null || true
-    local wt_path
-    wt_path=$(git -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null | wt_sid_match "$cur_sid")
-    if [ -n "$wt_path" ] && [ -d "$wt_path" ]; then
-        git -C "$REPO_ROOT" worktree remove -f "$wt_path" 2>/dev/null || true
+    if _valid_identifier "$cur_sid"; then
+        local wt_path
+        wt_path=$(git -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null | wt_sid_match "$cur_sid")
+        if [ -n "$wt_path" ] && [ -d "$wt_path" ]; then
+            git -C "$REPO_ROOT" worktree remove -f "$wt_path" 2>/dev/null || true
+        fi
     fi
     add_held_claim "$slice"
     printf 'reclaimed %s\n' "$slice"
@@ -818,8 +915,10 @@ cmd_session_start() {
         fi
     fi
 
+    validate_session_id "$SESSION_ID"
     local sess_dir
     sess_dir="$STATE_DIR/session-$SESSION_ID"
+    _assert_state_path "$sess_dir" || exit 1
     mkdir -p "$sess_dir"
     # Idempotent — only create files if absent
     if [ ! -f "$sess_dir/checkpoint" ]; then
@@ -922,6 +1021,7 @@ cmd_session_bootstrap() {
     if [ -f "$hcf" ]; then
         while IFS= read -r slice; do
             [ -z "$slice" ] && continue
+            _valid_slice_name "$slice" || continue
             local _ref cur_sha cur_sid new_sha
             _ref=$(claim_ref_for "$slice")
             cur_sha=$(read_claim_sha "$slice")
@@ -1003,6 +1103,7 @@ cmd_session_end() {
         if [ "$got_lock" -eq 1 ]; then
             while IFS= read -r slice; do
                 [ -z "$slice" ] && continue
+                _valid_slice_name "$slice" || continue
                 local _ref cur_sha cur_sid
                 _ref=$(claim_ref_for "$slice")
                 cur_sha=$(read_claim_sha "$slice")
@@ -1019,14 +1120,14 @@ cmd_session_end() {
             if [ -n "$_se_rel_sha" ]; then
                 git -C "$REPO_ROOT" update-ref -d "$LOCK_REF" "$_se_rel_sha" 2>/dev/null || true
             fi
-            rm -rf "$sess_dir"
+            _remove_session_dir "$SESSION_ID"
         else
             printf 'loom-coord session-end: could not acquire lock; claims not released\n' >&2
             exit 3
         fi
     else
         # No held-claims file — safe to remove the session dir directly
-        rm -rf "$sess_dir"
+        _remove_session_dir "$SESSION_ID"
     fi
     exit 0
 }
@@ -1036,6 +1137,10 @@ cmd_session_end() {
 # ---------------------------------------------------------------------------
 cmd_cleanup() {
     mkdir -p "$STATE_DIR"
+
+    if [ -n "$SESSION_ID" ]; then
+        validate_session_id "$SESSION_ID"
+    fi
 
     # Prune stale worktree refs
     git -C "$REPO_ROOT" worktree prune 2>/dev/null || true
@@ -1112,6 +1217,10 @@ cmd_cleanup() {
                 skipped=$((skipped + 1))
                 continue
             fi
+            if ! _valid_identifier "$sid"; then
+                skipped=$((skipped + 1))
+                continue
+            fi
 
             # Liveness = lease freshness (ADR 0015)
             if claim_is_fresh "$ts"; then
@@ -1128,9 +1237,7 @@ cmd_cleanup() {
                     if [ -n "$wt_path" ] && [ -d "$wt_path" ]; then
                         git -C "$REPO_ROOT" worktree remove -f "$wt_path" 2>/dev/null || true
                     fi
-                    if [ -d "$STATE_DIR/session-$sid" ]; then
-                        rm -rf "$STATE_DIR/session-$sid"
-                    fi
+                    _remove_session_dir "$sid"
                     swept=$((swept + 1))
                 else
                     # CAS refused — holder renewed (alive); skip destruction
@@ -1171,6 +1278,7 @@ cmd_renewer_start() {
         printf 'loom-coord renewer-start: <session-pid> required\n' >&2
         exit 1
     fi
+    validate_pid "$spid"
 
     # Capture reuse-robust identity of the stable session process (ADR 0015 §2)
     local sst
