@@ -285,6 +285,13 @@ mutate_direct() { "$LOOM_TEST_BASH" "$HARNESS" __mutation "$RUN_ROOT" "$@"; }
     done
 }
 
+@test "RED>GREEN: handshake deadline is computed after the pre-inventory walk, not before it" {
+    prepare_run
+    LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS=2 LOOM_DOGFOOD_TEST_INVENTORY_SLEEP=3 mutate claude-install claude install
+    [ "$status" -eq 0 ]
+    [ "$output" = applied ]
+}
+
 @test "residue after uninstall is refused (exit 6)" {
     prepare_run
     harness --exercise "$RUN_ROOT"

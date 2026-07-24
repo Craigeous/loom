@@ -357,6 +357,10 @@ _inventory_root() {
 # owned roots; prints one compact array.
 _compute_inventory() {
     local run_root="$1" label
+    # Test-only: proves the handshake deadline is computed AFTER this walk,
+    # not before it (a real installed cache tree can make this walk take
+    # longer than the handshake window). Unset in every real run.
+    [ -n "${LOOM_DOGFOOD_TEST_INVENTORY_SLEEP:-}" ] && sleep "$LOOM_DOGFOOD_TEST_INVENTORY_SLEEP"
     {
         for label in claude-home codex-home project system-home tmp; do
             _inventory_root "$label" "$run_root/$label"
@@ -813,7 +817,6 @@ _start_attempt() {
     deadline_s=$(printf '%s' "$fixture" | jq -r '.handshakeTimeoutSeconds // empty')
     [ -n "$deadline_s" ] || deadline_s=$DEFAULT_HANDSHAKE_TIMEOUT
     [ -n "${LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS:-}" ] && deadline_s="$LOOM_DOGFOOD_HANDSHAKE_TIMEOUT_SECONDS"
-    deadline=$(($(date +%s) + deadline_s))
 
     slug="$substep.$attempt"
     pre_inv=$(_compute_inventory "$run_root")
@@ -824,6 +827,14 @@ _start_attempt() {
         '(.commands[$c][$k] // []) | map(gsub("\\$REPO_ROOT"; $repo) | gsub("\\$RUN_ROOT"; $run))')
     argv_hash=$(_sha256_str "$(printf '%s' "$argv_json" | jq -Sc '.')")
     allowed=$(_allowed_root_labels "$client")
+
+    # Computed here, immediately before the handshake actually begins (the
+    # intent write and supervisor spawn below): a real installed cache tree
+    # can make _compute_inventory's full-tree SHA-256 walk above take longer
+    # than the handshake window itself, so a deadline computed BEFORE that
+    # walk can already be in the past by the time anyone waits on it,
+    # producing a spurious immediate self-timeout on the very first attempt.
+    deadline=$(($(date +%s) + deadline_s))
 
     _inject "before:intent"
     _append_journal_records "$journal" \
