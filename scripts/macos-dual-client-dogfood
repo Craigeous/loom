@@ -389,11 +389,16 @@ _write_inventory() {
     _atomic_write "$path" "$(printf '%s' "$json" | jq -Sc '.')"
 }
 
-# _diff_inventory_roots <pre-json> <post-json> — the set of distinct root
-# labels touched (added or removed entries) between two inventories.
+# _diff_inventory_roots <pre-json-file> <post-json-file> — the set of
+# distinct root labels touched (added or removed entries) between two
+# inventories. Takes FILE PATHS, never in-memory JSON as a jq --argjson
+# command-line argument: a real installed cache tree's inventory can be
+# many megabytes, which overflows the OS argv/exec size limit
+# ("Argument list too long") well before it overflows a shell variable or a
+# pipe.
 _diff_inventory_roots() {
-    jq -nc --argjson a "$1" --argjson b "$2" \
-        '( ($b - $a) + ($a - $b) ) | map(.root) | unique | .[]' -r
+    jq -nc --slurpfile a "$1" --slurpfile b "$2" \
+        '(($b[0] - $a[0]) + ($a[0] - $b[0])) | map(.root) | unique | .[]' -r
 }
 
 # ---------------------------------------------------------------------------
@@ -1009,7 +1014,7 @@ _finish_mutation() {
 # Prints applied | quarantine | product-failure.
 _apply_mutation_result() {
     local run_root="$1" journal="$2" client="$3" opkey="$4" mode="$5"
-    local intent token allowed_json post_inv post_hash slug pre_inv_json bad label
+    local intent token allowed_json post_inv post_hash slug pre_file post_file bad label
     local postcondition_ok=1 term exit_code stdout_hash
 
     intent=$(_journal_record "$journal" intent)
@@ -1020,13 +1025,15 @@ _apply_mutation_result() {
     post_inv=$(_compute_inventory "$run_root")
     post_hash=$(_inventory_hash "$post_inv")
     _write_inventory "$run_root" "$slug" post "$post_inv"
-    pre_inv_json=$(cat -- "$run_root/control/inventory/$slug.pre.json" 2>/dev/null || printf '[]')
+    pre_file="$run_root/control/inventory/$slug.pre.json"
+    post_file="$run_root/control/inventory/$slug.post.json"
+    [ -f "$pre_file" ] || printf '[]' >"$pre_file"
 
     bad=""
     while IFS= read -r label; do
         [ -z "$label" ] && continue
         printf '%s' "$allowed_json" | jq -e --arg l "$label" 'index($l) != null' >/dev/null 2>&1 || bad="$label"
-    done < <(_diff_inventory_roots "$pre_inv_json" "$post_inv")
+    done < <(_diff_inventory_roots "$pre_file" "$post_file")
 
     _check_postcondition "$run_root" "$client" "$opkey" || postcondition_ok=0
 
