@@ -17,8 +17,7 @@
     "local-review-orchestration",
     "local-review-defect-battery",
     "sanitized-evaluation-workspace",
-    "evaluation-output-recorder",
-    "macos-dual-client-dogfood"
+    "evaluation-output-recorder"
   ],
   "authority_amendments": [
     {
@@ -107,8 +106,8 @@
     "state": "not-reached"
   },
   "improvement_plan_blob": "316ae4bc964fb422134151478b6369e1f9b4cfa5",
-  "phase": "publication-intent",
-  "predecessor": "eccb871f73a0e8af50fb1e3208b2d559ce9c74e5",
+  "phase": "active",
+  "predecessor": "dadf6f0545afced2b10e8ab90fd67cfc6661c635",
   "program_id": "loom-repository-improvement-2026-07-21-de3d1865-6950-4dd1-9c20-8246d0989196",
   "publication_intent": {
     "candidate_input_sha": "2a4700d5ba650254b2e38e6c9bcd5f20a79c21e7",
@@ -186,10 +185,33 @@
       },
       "verified_target_ref": "refs/heads/main",
       "settled_at": "2026-07-23T03:06:23Z"
+    },
+    "macos-dual-client-dogfood": {
+      "candidate_input_sha": "2a4700d5ba650254b2e38e6c9bcd5f20a79c21e7",
+      "evidence": {
+        "candidate_manifest_sha256": "da61c862902ed4eb5baeb768d5cc36b27bf0afe026af8d114c7a14e626897b84",
+        "evaluator_verdict_sha256": "d0a8dc1e1629d435fbec1e6cef5a49e6bfd2b421c502fb61ee7908e1529276eb",
+        "final_exact_gate_inventory_sha256": "7d5fc7938646c024fe43dfe47f3fadf352d50e1ea37180b1d93cca632376d440",
+        "input_inventory_sha256": "7d5fc7938646c024fe43dfe47f3fadf352d50e1ea37180b1d93cca632376d440",
+        "publication_evidence_inventory_sha256": "c81202965d141ba41646c3bcbe14e6590d27ca3f4551ff0a84efe66d43c1873f",
+        "review_aggregate_sha256": "370528e8e3e74689c78013148385e5132f6313410d6f83b6637b1e94e0304333"
+      },
+      "final_base": "a3cb007b5ddb3307867fc2f321a0368bfeac9336",
+      "initial_base": "a3cb007b5ddb3307867fc2f321a0368bfeac9336",
+      "publication_intent_commit": "dadf6f0545afced2b10e8ab90fd67cfc6661c635",
+      "publication_intent_state_sha256": "825d07b462f749a6494b735a62ae8fcde65cd35eeea75fd1d1c5d0e132b8af73",
+      "publication_mode": "remote-direct",
+      "receipt_sha256": "3b2e4d63ae6e0b48ec7a9f2e1a28fdbcb579ecb95853bf53743e0bbfc5594f8d",
+      "result_sha": "2a4700d5ba650254b2e38e6c9bcd5f20a79c21e7",
+      "result_tree": "06a454a65504f0a3f6e98a7b87bc1c4683780439",
+      "schema": "loom-repository-bootstrap-slice-result/v1",
+      "settled_at": "2026-07-24T14:31:29Z",
+      "slice_head": "a000cefc9bc893db5e6bd54b865342081e9fdb27",
+      "verified_target_ref": "refs/heads/main"
     }
   },
   "schema": "loom-repository-bootstrap-state/v1",
-  "sequence": 6,
+  "sequence": 7,
   "target_ref": "refs/heads/main",
   "transition_ref": "refs/heads/loom/bootstrap-transition"
 }
