@@ -16,12 +16,19 @@ filesystem state paths and git refs from **externally supplied identifiers**:
 
 - The **session id** (`--session` / `$LOOM_SESSION_ID`) is interpolated directly into
   `$STATE_DIR/session-<id>/…` paths (`STATE_DIR="$GITDIR/loom"`), with no validation.
-  A value like `../../victim` computes `$STATE_DIR/session-../../victim`, which escapes
-  `.git/loom`.
+  A value like `x/../../victim` computes `$STATE_DIR/session-x/../../victim`, which
+  resolves to `.git/victim` — an escape out of `.git/loom`. (A bare `../../victim`
+  yields `.git/loom/victim`, still inside `loom`; the traversal only bites once the
+  literal `session-` segment is itself consumed, hence the `x/` lead. Regression case 1
+  uses the real-escape form.)
 - **Slice names** (positional arg to `claim`/`renew`/`release-claim`/`reclaim`) are
-  hashed for the ref (safe) and base64'd into the claim blob (safe), but the raw slice
-  string is also written one-per-line to `session-<id>/held-claims` and read back — a
-  newline or tab in a slice name corrupts that file's one-record-per-line invariant.
+  hashed for the ref (V5, safe) and base64'd into the claim blob (W2, safe), so a slice
+  name **never** forms a filesystem path or a git ref path — arbitrary slice names
+  (including `:` and `..`, per V5/V6) are a supported, tested capability. The **only**
+  invariant a slice name can violate is the `session-<id>/held-claims` one-record-per-line
+  format, into which the raw slice string is written and read back — so the sole slice
+  bytes that need rejecting are the empty string and newline/tab/control bytes; `:` and
+  `..` are safe and must stay claimable.
 - A **PID** (positional arg to `renewer-start`) is passed to `process_starttime`,
   which uses it in `/proc/<pid>/stat` and `ps -p <pid>`.
 - **Session ids decoded from claim blobs** (field 1) are used as *paths* in the
@@ -59,7 +66,7 @@ finalize step 2 / spec 08 boundary), not part of this implement diff.
 
 All edits are in `plugins/loom/bin/loom-coord` unless a step names the bats file.
 
-1. **Add a centralized identifier grammar predicate.** Define, alongside the existing
+1. **Add the two centralized grammar predicates.** Define, alongside the existing
    helper functions (after `now()`, before the subcommand functions), a single
    pure-predicate:
 
@@ -86,6 +93,30 @@ All edits are in `plugins/loom/bin/loom-coord` unless a step names the bats file
    path (leading `/`). Combined with the `/`-rejection, path traversal is structurally
    impossible; the explicit `*..*` reject satisfies the M1 wording literally.
 
+   `_valid_identifier` is the grammar for identifiers that **form paths, refs, or
+   process arguments** — session ids (user-supplied and decoded-from-blob) and, via
+   `validate_pid`, PIDs. It is **not** applied to slice names (see the next predicate).
+
+   Then define a **separate, narrow** predicate for slice names, which are never
+   path/ref material (V5 hashes them; W2 base64-encodes them) and so only need to
+   protect the one `held-claims` line format:
+
+   ```sh
+   # _valid_slice_name <value> — returns 0 iff <value> is a legal held-claims record:
+   #   non-empty AND contains no newline, tab, or other control byte.
+   #   Slice names are hash-consumed for the ref (V5) and base64'd into the blob (W2),
+   #   so ":" and ".." are SAFE and must remain claimable (SC1, V5b, V5/V6 capability).
+   #   The ONLY invariant to protect is the session-<id>/held-claims one-record-per-line
+   #   format, which control bytes (esp. newline/tab) would corrupt.
+   # Bash 3.2 / BSD safe: pure case-glob with the POSIX [[:cntrl:]] class.
+   _valid_slice_name() {
+       local v="$1"
+       [ -n "$v" ] || return 1                    # empty
+       case "$v" in *[[:cntrl:]]*) return 1 ;; esac  # newline, tab, any control byte
+       return 0
+   }
+   ```
+
 2. **Add exit-on-invalid wrappers for user-supplied identifiers.** Define next to
    `_valid_identifier`:
 
@@ -97,8 +128,8 @@ All edits are in `plugins/loom/bin/loom-coord` unless a step names the bats file
        fi
    }
    validate_slice_name() {
-       if ! _valid_identifier "$1"; then
-           printf 'loom-coord %s: invalid slice name (expected [A-Za-z0-9][A-Za-z0-9._-]{0,127}, no "..")\n' "$SUBCOMMAND" >&2
+       if ! _valid_slice_name "$1"; then
+           printf 'loom-coord %s: invalid slice name (must be non-empty with no newline/tab/control bytes)\n' "$SUBCOMMAND" >&2
            exit 1
        fi
    }
@@ -157,7 +188,11 @@ All edits are in `plugins/loom/bin/loom-coord` unless a step names the bats file
 5. **Validate slice names at every user-supplied entry point.** In `cmd_claim`,
    `cmd_renew`, `cmd_release_claim`, and `cmd_reclaim`, immediately after each
    subcommand's existing "slice name required" empty check on `$slice`, add
-   `validate_slice_name "$slice"`.
+   `validate_slice_name "$slice"`. This calls the **narrow** `_valid_slice_name`
+   predicate (Step 1): it rejects only empty/newline/tab/control slice names and
+   deliberately **keeps** `:`/`..`/`/`-bearing names claimable (they are hash-consumed
+   for the ref, never path material), preserving the V5/V6 capability and keeping SC1
+   and V5b green.
 
 6. **Validate the PID.** In `cmd_renewer_start`, after the existing empty check on
    `$spid`, add `validate_pid "$spid"` (before `process_starttime "$spid"`).
@@ -178,10 +213,14 @@ All edits are in `plugins/loom/bin/loom-coord` unless a step names the bats file
      on the git-computed ref hash, not the sid, so it is unaffected; only the
      filesystem removal is gated).
    - In `cmd_session_bootstrap` and `cmd_session_end`, when iterating slice names read
-     from `held-claims`, skip any line failing `_valid_identifier` (quarantine a
-     corrupt registry line rather than acting on it): inside each
-     `while IFS= read -r slice; do … done` loop, after the `[ -z "$slice" ] && continue`
-     guard, add `_valid_identifier "$slice" || continue`.
+     from `held-claims`, skip any line failing **`_valid_slice_name`** (the *narrow*
+     slice predicate — quarantine only a byte-corrupt registry line, never a
+     legitimately-held `:`/`..` name): inside each `while IFS= read -r slice; do … done`
+     loop, after the `[ -z "$slice" ] && continue` guard, add
+     `_valid_slice_name "$slice" || continue`. **Using `_valid_slice_name` (not
+     `_valid_identifier`) here is load-bearing:** a claim legitimately held under the
+     pre-slice rules whose name contains `:` or `..` (SC1/V5b) stays claimed and gets
+     re-issued/released normally; only newline/tab/control-corrupted lines are skipped.
 
 8. **Replace the recursive session-dir deletions.** In `cmd_session_end`, replace both
    `rm -rf "$sess_dir"` occurrences with `_remove_session_dir "$SESSION_ID"`
@@ -213,9 +252,22 @@ LOOM_DIFF_BASE=HEAD scripts/check      # runs shfmt + shellcheck + the full bats
 `scripts/check` must exit 0. The full existing `loom-coord.bats` suite (64 cases at
 base) must pass unchanged **except** the intentionally-updated `T3` case (Step 9); all
 other cases are the regression proof that identifier validation does not reject the
-legitimate session ids and slice names the suite uses (verified: every existing
-literal — e.g. `foo`, `foo-bar`, `run1`, `ses-authv2-owner`, minted uuids,
-`coord-identifier-boundaries`, `auth-v2` — matches the grammar).
+legitimate session ids and slice names the suite uses. Verified mechanically against the
+two distinct grammars:
+
+- **Session ids** all match `_valid_identifier` (e.g. `foo`, `foo-bar`, `run1`,
+  `ses-authv2-owner`, minted uuids, `ses-SC1`, `ses-V5b`).
+- **Slice names** are checked only by the narrow `_valid_slice_name` (non-empty, no
+  control bytes). The suite's special-char slice tests therefore **all stay green**,
+  including the two that the previous over-restrictive grammar would have broken:
+  `SC1` (`claim "slice:foo"`, bats line 1293) and `V5b` (`claim "a..b"`, bats line
+  1735) both contain only printable bytes, so both still claim/renew/release
+  successfully — as do `foo.lock` (V5a), `Auth`/`auth` (V6). No existing slice literal
+  contains a control byte, so `_valid_slice_name` rejects none of them.
+
+The "suite passes unchanged except T3" claim is therefore mechanically true under the
+two-grammar design: T3 is the single authorized change (Step 9 / Notes), and no other
+case flips.
 
 **New negative cases — each MUST be shown failing on the pre-fix helper (red) and
 passing after (green).** Red is demonstrated by running the new test against the helper
@@ -241,9 +293,14 @@ regression list:
    swept), the **sentinel is untouched**, and the claim ref is preserved. Add the
    symmetric `reclaim` case: a stale claim held by a traversal sid must not drive a
    worktree removal outside the tree.
-7. **Slice-name rejection** — under a held lock, `claim` (and `renew`) with a slice
-   name containing `/`, a newline, or `..` each exit 1; empty slice exits 1
-   (regression).
+7. **Slice-name rejection (narrow)** — under a held lock, `claim` (and `renew`) with a
+   slice name containing a **newline** (built with `printf`), a **tab**, or another
+   control byte each exit 1; empty slice exits 1 (regression). **Positive counterpart
+   (capability preserved):** in the same or an adjacent case, assert that `claim` with a
+   slice name containing `/`, `:`, or `..` (e.g. `a/b`, `slice:foo`, `a..b`) **succeeds**
+   (exit 0) — these are hash-consumed, not path/ref material, and must remain claimable.
+   This pair proves the validator protects the `held-claims` line format *without*
+   removing the V5/V6 freeform-slice-name capability.
 8. **PID rejection** — `renewer-start` with a non-numeric pid (e.g. `1;rm`) exits 1.
 9. **Known-file removal / quarantine** — a normal `session-end` removes the known files
    and the (now-empty) session dir (regression: existing session-end cases stay green);
@@ -275,6 +332,32 @@ pass under both lanes.
   corrupt claim row can only arise from adversarial/hand-edited state once user-supplied
   ids are validated at write time (Steps 4–5); leaving it for an operator is safer than
   acting on it.
+- **Two grammars, by design.** Session ids (and decoded-from-blob sids and PIDs) form
+  filesystem paths / process args, so they take the strict `_valid_identifier` grammar
+  (no `/`, no `..`). Slice names are hash-consumed for the git ref (V5) and base64'd into
+  the claim blob (W2) — they are **never** path or ref material — so they take the narrow
+  `_valid_slice_name` predicate that guards only the `held-claims` one-record-per-line
+  format (reject empty/newline/tab/control). Restricting slice names to the session
+  grammar would remove the tested V5/V6 freeform-slice capability (SC1 `slice:foo`, V5b
+  `a..b`) with no safety benefit and would strand any pre-existing `:`-named claim at the
+  Step 7 held-claims guard; this plan deliberately does not do that.
+- **`Checkpoint arguments` M1 bullet — dispositioned out of scope.** The M1 section lists
+  "Checkpoint arguments where applicable." Verified not applicable: `cmd_checkpoint_write`
+  writes `$EXTRA_ARGS` (or stdin) as file **content** to `$sess_dir/checkpoint`, where
+  `sess_dir` is derived from the already-validated `SESSION_ID`. The argument never forms
+  a path, ref, or process identifier — it is free-form payload — so "where applicable"
+  resolves to *no validation needed*. Recorded here so the M1 bullet is visibly
+  discharged, not silently dropped.
+- **Round-0 revision (plan-eval FAIL → this pass).** The blind plan-eval flagged that the
+  original draft applied the strict `_valid_identifier` grammar to slice names, which
+  would break SC1 and V5b and contradict the V5/V6 freeform-slice design. This revision
+  drops the slice-name grammar restriction: it introduces the narrow `_valid_slice_name`
+  predicate (Step 1), routes slice-name validation (Steps 2/5) and the held-claims-line
+  guard (Step 7) through it, restores the mechanically-true "suite passes unchanged except
+  T3" claim (Verification), corrects the Context traversal example to `x/../../victim`,
+  and dispositions the checkpoint-arguments bullet above. The T3 quarantine flip and all
+  session-id / decoded-sid / PID / `_remove_session_dir` scope are unchanged (the
+  evaluator confirmed them sound).
 - **Sealed-package review.** Per ADR 0023 §1 this is a code-bearing bootstrap slice, so
   at `Implemented` the orchestrator runs the §3 three cold auxiliary finders and the §4
   independent evaluator against the exact committed `base..head`; the evaluator owns the
