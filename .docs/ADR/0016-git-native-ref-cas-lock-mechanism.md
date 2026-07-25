@@ -1,6 +1,6 @@
 # 0016 — Git-Native Ref Compare-and-Swap as the Lock/Claim Substrate
 
-Status: Approved
+Status: Accepted
 Date: 2026-07-02
 
 ## Context

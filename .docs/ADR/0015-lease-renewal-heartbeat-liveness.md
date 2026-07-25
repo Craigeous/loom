@@ -1,6 +1,6 @@
 # 0015 — Lease-Renewal Heartbeat as the Liveness Signal
 
-Status: Approved
+Status: Accepted
 Date: 2026-07-02
 
 ## Context

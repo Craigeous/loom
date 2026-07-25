@@ -47,6 +47,11 @@ PASS/FAIL + severity rules are in
 - [coord-identifier-boundaries code evaluation](coord-identifier-boundaries-eval.md) —
   PASS round 0 (M1 slice 1); all four review findings adjudicated CONFIRMED MINOR,
   non-blocking; `Ready to Publish` pending ADR-0023 settlement.
+- [ADR 0025 reconciliation-authority plan evaluation](0025-reconciliation-authority-eval.md)
+  — `bootstrap-ratification: degraded`; PASS round 0 with three MINOR folded,
+  resolving PASS; advisory only.
+- [ADR 0025 reconciliation-authority owner acceptance](0025-reconciliation-authority-acceptance.md)
+  — dispositive owner gate, Accepted 2026-07-25.
 
 See also [`../status/progress.md`](../status/progress.md) § "M0 errata" — the
 record-keeping reconciliation of four early-stretch process deviations found by the

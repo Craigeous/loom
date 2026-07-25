@@ -7,7 +7,7 @@ An accepted ADR is **immutable**: if a decision becomes wrong, write a new ADR t
 marks the old one *superseded* — never rewrite history. Living architecture text
 belongs in `../spec/`, not here.
 
-Naming: `NNNN-short-title.md`. Lifecycle: `Draft → Plan Review → Approved` (see
+Naming: `NNNN-short-title.md`. Lifecycle: `Draft → Plan Review → Accepted` (see
 [../spec/03-artifact-lifecycle.md](../spec/03-artifact-lifecycle.md)).
 
 ## Accepted
@@ -37,7 +37,8 @@ Naming: `NNNN-short-title.md`. Lifecycle: `Draft → Plan Review → Approved` (
 - [0022 — Controlled-Input Independent Evaluation and Its Isolation Boundary](0022-controlled-input-independent-evaluation.md) — corrects ADR 0004's overbroad blind-evaluation claim and defines the sanitized boundary
 - [0023 — Repository Self-Hosting Bootstrap Transition](0023-repository-self-hosting-bootstrap-transition.md) — authorizes the protected, append-only transition used while Loom's review, evaluation, and remote-publication machinery becomes self-hosting
 - [0024 — macOS-First Dual-Client Dogfood Bootstrap Amendment](0024-macos-first-dual-client-dogfood-bootstrap-amendment.md) — authorizes one exact transition amendment and two named Apple-silicon macOS dogfood slices without changing the v0.2 release gate
+- [0025 — Reconciliation Authority: Plugin-Root Supersession and No-Bypass §7 Target Landing](0025-reconciliation-authority-plugin-root-no-bypass-landing.md) — **supersedes ADR 0006** on the plugin-root location (re-decides the implemented `./plugins/loom` subdir; directs restoring 0006's pre-rewrite body); establishes that every commit advancing `origin/main` lands through ADR 0023 §7 with no direct-push bypass class, and **narrowly amends ADR 0023 §1/§6/§7** to add a persistent `docs-governance/v1` slice class (blind plan-eval + cold docs code-eval + gate as its §7 evidence, no finder package); self-bootstraps via cold plan-eval + owner acceptance gate
 
 ## In Review
 
-- [0025 — Reconciliation Authority: Plugin-Root Supersession and No-Bypass §7 Target Landing](0025-reconciliation-authority-plugin-root-no-bypass-landing.md) — **supersedes ADR 0006** on the plugin-root location (re-decides the implemented `./plugins/loom` subdir; directs restoring 0006's pre-rewrite body); establishes that every commit advancing `origin/main` lands through ADR 0023 §7 with no direct-push bypass class, and **narrowly amends ADR 0023 §1/§6/§7** to add a persistent `docs-governance/v1` slice class (blind plan-eval + cold docs code-eval + gate as its §7 evidence, no finder package); self-bootstraps via cold plan-eval + owner acceptance gate
+None.

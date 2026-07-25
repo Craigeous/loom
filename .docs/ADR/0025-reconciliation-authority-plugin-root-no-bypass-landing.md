@@ -1,6 +1,6 @@
 # 0025 — Reconciliation Authority: Plugin-Root Supersession and No-Bypass §7 Target Landing
 
-Status: Plan Review
+Status: Accepted
 Date: 2026-07-24
 
 ## Context
