@@ -31,11 +31,12 @@ source of truth; `roadmap.md` is milestone order.
   loom-local-review/v1 (ADR 0023 §3) — clean at 4 MINOR (T1-T3
   secondary-call-site test-coverage gaps, T4 a NEG-ID count doc miscount);
   code-eval PASS round 0. `Status: Landed/Archived — settled (ADR-0023 receipt)`.
-  Slice-plan archived. **NEXT ACTION: plan M1 slice 2 `coord-lock-ownership`**
-  (after this remediation-1 record-keeping slice; per
-  `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety"). Also
-  landed on `main` during this slice (separate commit): `0ae81c1`, a Linux CI
-  `stat -f` GNU/BSD portability fix — hosted CI green both lanes.
+  Slice-plan archived. **NEXT ACTION: after this docs-governance-reconciliation
+  slice lands, remediation-3 (playbook-conformance), then plan M1 slice 2
+  `coord-lock-ownership`** (per `.docs/repository-improvement-plan.md` § "M1 — Fix
+  coordinator safety"). Also landed on `main` during this slice (separate commit):
+  `0ae81c1`, a Linux CI `stat -f` GNU/BSD portability fix — hosted CI green both
+  lanes.
 - **Owner decisions 2026-07-24 (governance deferred-decisions resolved) + M1 planning
   started (historical — M1 slice 1 above is now complete).** Two owner decisions are recorded (details in `progress.md` → Current
   state / M0 errata): (1) **SCHEDULE `client-floor-adapter-smoke`, do not retire** —
@@ -324,11 +325,12 @@ source of truth; `roadmap.md` is milestone order.
   read-filter false-positive documented as accepted limitation in
   `commit-convention.md`, commit d35b565).
 
-0. **NEXT ACTION — plan M1 slice 2 `coord-lock-ownership`** (after this
-   remediation-1 record-keeping slice). M1 slice 1 (`coord-identifier-boundaries`)
-   is SETTLED (ADR-0023 receipt; result main `00582aa`) — see "Where things stand"
-   above. Per `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator
-   safety", `coord-lock-ownership` is next, then `coord-schema-cas`.
+0. **NEXT ACTION — after this docs-governance-reconciliation slice lands,
+   remediation-3 (playbook-conformance), then plan M1 slice 2
+   `coord-lock-ownership`.** M1 slice 1 (`coord-identifier-boundaries`) is SETTLED
+   (ADR-0023 receipt; result main `00582aa`) — see "Where things stand" above. Per
+   `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety",
+   `coord-lock-ownership` is next after remediation-3, then `coord-schema-cas`.
 
 0. **COMPLETED (historical) — owner-directed.** All post-M4 threads were
    **COMPLETE**: multi-session coordination (ADR 0014/0015/0016 → `loom-coord.sh` →
