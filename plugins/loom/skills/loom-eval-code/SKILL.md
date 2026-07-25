@@ -24,10 +24,14 @@ Target: the workflow argument (if empty, the next `Implemented` slice).
    the cold launch itself; Claude: launch natively per
    `roles/code-evaluator.md` / `agents/code-evaluator.md` using its printed
    configuration). Give it those blind inputs only.
-3. The role **re-runs the gate** (doesn't trust the claim), writes
-   `.docs/evaluations/<slice>-eval.md` (PASS/FAIL + severity), sets status
-   (`Landed` on PASS, `In Progress` on FAIL — status line only), and commits
-   author-neutral.
-4. Verify the commit; report the verdict. On PASS, the next step is the
-   developer's finalize pass (update `status/`, archive the plan) — run
-   `loom-develop` in finalize mode or let `loom-run` handle it.
+3. The role **re-runs the gate** (doesn't trust the claim) and produces its
+   verdict (PASS/FAIL + severity) to its confined scratch/output workspace, then
+   returns — it does not write into `.docs/evaluations/`, set the status line, or
+   commit. The recorder/root installs the verdict under
+   `.docs/evaluations/<slice>-eval.md`, makes the status transition (**`Ready to
+   Publish`** on PASS — a code-eval PASS does not by itself reach `Landed`;
+   `In Progress` on FAIL), and commits author-neutral.
+4. Verify the recorder's commit and the new status; report the verdict. On PASS
+   (status now `Ready to Publish`), the next step is the developer's finalize pass
+   (update `status/`, archive the plan) — run `loom-develop` in finalize mode or
+   let `loom-run` handle it.

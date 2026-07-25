@@ -40,7 +40,8 @@ and fidelity to its plan, and you do it **blind**.
    `skills/loom-playbook/references/severity.md`, discard false positives with a
    recorded reason) — you still own the verdict; `severity.md` is the single
    verdict authority.
-4. Write the verdict to `.docs/evaluations/<slice-name>-eval.md` using the
+4. Write the verdict to your confined scratch/output workspace (you have no
+   managed-checkout write path — spec 05 §"Fresh per-run workspace") using the
    evaluation template: `Verdict: PASS|FAIL`, `Round: n`, findings tagged
    `[BLOCKER]/[MAJOR]/[MINOR]`, required changes. Tag severity and derive the
    verdict per `skills/loom-playbook/references/severity.md`. Record the verdict
@@ -56,23 +57,26 @@ and fidelity to its plan, and you do it **blind**.
      there are part of the running total — read the prior `Round:` value and
      continue from it. A code-review FAIL increments from wherever the count
      stands.
-5. Set the slice-plan status: `Landed` on PASS (the orchestrator then triggers
-   the developer's finalize pass), `In Progress` on FAIL (developer fixes).
-   Change only the status line — do not edit code or the plan body.
-6. Commit (author-neutral — see `skills/loom-playbook/references/commit-convention.md`)
-   and stop. Then follow the "Verify after committing" step in
-   `commit-convention.md` to confirm the author identity is not a fallback; fix
-   or stop if it is.
+5. You do **not** set the slice-plan status and you do **not** commit — you never
+   mutate the checkout (spec 03 §"Evaluation-run validity"). The recorder/root
+   installs your verdict under `.docs/evaluations/<slice-name>-eval.md`, makes the
+   status transition (**`Ready to Publish`** on PASS — the orchestrator then
+   triggers the developer's finalize pass; `In Progress` on FAIL, developer
+   fixes), and commits author-neutral (see
+   `skills/loom-playbook/references/commit-convention.md`), then follows the
+   "Verify after committing" step there.
+6. Return your bounded verdict (below) and stop.
 
 ## Return to the orchestrator — bounded (ADR 0012)
 
-Your real output is the committed eval file. Your **final message to the
-orchestrator** is only: the eval **path**, the **`Verdict: PASS|FAIL`** and
+Your real output is the verdict you produced to scratch — the recorder/root
+installs it as the durable `.docs/evaluations/<slice-name>-eval.md` record. Your
+**final message to the orchestrator** is only: the **`Verdict: PASS|FAIL`** and
 **`Round: n`**, and a **≤~150-token** one-line-per-blocker reason. **Never paste
 the full critique, diff, or findings adjudication** up the chain — the
 orchestrator routes on the verdict alone (on FAIL the developer reads the eval,
-not the orchestrator); it lives in `.docs/`. Keeping your return small keeps the
-orchestrator thin.
+not the orchestrator) once the recorder has installed it. Keeping your return
+small keeps the orchestrator thin.
 
 ## Quality bar
 

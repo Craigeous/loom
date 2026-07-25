@@ -13,8 +13,11 @@ decide which role to spawn next. Every transition is paired with a commit.
 | `Approved`           | Artifact accepted                           | developer (if a slice)|
 | `In Progress`        | Developer implementing                      | developer             |
 | `Implemented`        | Gate green; awaiting code review            | code evaluator        |
-| `Landed`             | Code approved; finalize underway            | developer (finalize)  |
+| `Ready to Publish`   | Code evaluation passed; claim + evidence retained pending publication | orchestrator (landing helper) |
+| `Landed`             | Configured remote result independently verified and receipt recorded | developer (finalize) |
 | `Archived`           | Plan moved to archive/; history             | —                     |
+| `Accepted`           | ADR/spec approval (then immutable)          | —                     |
+| `Living`             | Perpetual status of the three `status/` docs, the spec index, and `09-open-questions.md` | — |
 | `Needs Clarification`| Blocked on a `## Notes` question            | clarifying role       |
 | `Abandoned`          | Dropped; kept for history                   | —                     |
 
@@ -26,6 +29,7 @@ decide which role to spawn next. Every transition is paired with a commit.
 | `Plan Review`                          | plan evaluator   |
 | `Approved` (slice-plan)                | developer        |
 | `Implemented`                          | code evaluator   |
+| `Ready to Publish`                     | orchestrator (landing helper) |
 | `Landed`                               | developer (finalize) |
 | `Needs Clarification`                  | clarifying role  |
 | `Draft` (after a reject, within scope) | author           |
@@ -56,10 +60,11 @@ for the full counting rule, the reset rule, and the escalation-summary contract.
 - Research: `Draft → Research Review → Approved`.
 - ADR / Spec: `Draft → Plan Review → Approved` (ADR then immutable; spec frozen).
 - Slice-plan: `Draft → Plan Review → Approved → In Progress → Implemented →
-  (code review) → Landed → Archived`, with FAIL edges back to `Draft` (plan) or
-  `In Progress` (code). Archive happens only **after** code-eval PASS. The
-  finalize pass that runs after code-eval PASS also updates the relevant
-  `CLAUDE.md` when the landed slice changed something in the curated-digest scope
+  (code review) → Ready to Publish → Landed → Archived`, with FAIL edges back to
+  `Draft` (plan) or `In Progress` (code). Archive happens only **after**
+  code-eval PASS. The finalize pass that runs after code-eval PASS also updates
+  the relevant `CLAUDE.md` when the landed slice changed something in the
+  curated-digest scope
   (a derived non-spec digest; per-slice history stays in `progress.md`) — see
   [spec 03](../../../../../.docs/spec/03-artifact-lifecycle.md) (*finalize pass*)
   and [spec 08](../../../../../.docs/spec/08-playbook.md) (the curated-digest

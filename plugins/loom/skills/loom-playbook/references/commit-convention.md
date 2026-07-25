@@ -75,7 +75,7 @@ Examples:
 
 - `Add slice-plan: native result-thread orchestration (Plan Review)`
 - `Implement week-rollover auto-advance; gate green (Implemented)`
-- `Evaluate week-rollover slice: PASS (Landed)`
+- `Evaluate week-rollover slice: PASS (Ready to Publish)`
 - `Approve spec 03 data-model (Plan Review → Approved)`
 
 Avoid: `Implemented by developer agent`, `Co-Authored-By: ...`, `planner draft`.

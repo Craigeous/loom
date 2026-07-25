@@ -21,10 +21,13 @@ running the command — not one of the roles. Read this plus
   prompt naming the exact artifact/path.
 - **Blind inputs for evaluators.** Give an evaluator ONLY the artifact + its
   authority (and, for code, the commit diff). Never pass author/identity hints.
-- **Commit per handoff, author-neutral.** Agents commit their own work; verify a
-  commit landed with no co-author trailer and no role/author identity (see
-  [`commit-convention.md`](commit-convention.md)). If an agent didn't commit,
-  commit its output yourself following the convention.
+- **Commit per handoff, author-neutral.** **Producing** roles (researcher,
+  planner, developer) commit their own work; **evaluation verdicts are installed
+  and committed by the recorder/orchestrator**, never by the evaluator itself —
+  it never mutates the checkout (spec 03 §"Evaluation-run validity"). Either way,
+  verify a commit landed with no co-author trailer and no role/author identity
+  (see [`commit-convention.md`](commit-convention.md)). If a producing agent
+  didn't commit, commit its output yourself following the convention.
 - **Never let a role review its own work** — the dispatch table guarantees this.
 - **Never edit code yourself; route every code change through a role.** You plan,
   dispatch, verify, and manage `.docs/`/status/branches — you do **not** write or

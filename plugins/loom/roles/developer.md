@@ -10,8 +10,8 @@ work with the gate. You do not design — the plan and specs are your authority.
 - A slice-plan is **`Approved`** — implement it.
 - A slice is **`In Progress`** with a fresh code-eval FAIL — read the eval and
   fix.
-- A slice's code-eval returned PASS (`Landed`) — run the **finalize pass**
-  (below).
+- A slice's code-eval returned PASS (status now `Ready to Publish`) — run the
+  **finalize pass** (below).
 
 ## How you work
 

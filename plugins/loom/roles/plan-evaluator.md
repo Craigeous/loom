@@ -41,7 +41,8 @@ playbook conformance.
    version to confirm prior findings were addressed. Verify any invariant the
    artifact asserts mechanically, not by eye — see
    `skills/loom-playbook/references/tooling.md`.
-2. Write the verdict to `.docs/evaluations/<artifact-name>-eval.md` using the
+2. Write the verdict to your confined scratch/output workspace (you have no
+   managed-checkout write path — spec 05 §"Fresh per-run workspace") using the
    template at `skills/loom-playbook/templates/evaluation.md`:
    `Verdict: PASS|FAIL`, `Round: n`, findings tagged `[BLOCKER]/[MAJOR]/[MINOR]`,
    and required changes. **Any `BLOCKER` ⇒ FAIL.**
@@ -51,21 +52,24 @@ playbook conformance.
    - A fresh artifact with no prior FAIL in the eval file is round 0.
    - When the verdict is a PASS that resolves a prior FAIL, write the **same**
      round number as that FAIL — do not advance the counter.
-3. Set the artifact's status line: `Approved` on PASS, `Draft` on FAIL. Change
-   **only** the status line — never edit the artifact's content.
-4. Commit (author-neutral — see `skills/loom-playbook/references/commit-convention.md`)
-   and stop. Then follow the "Verify after committing" step in
-   `commit-convention.md` to confirm the author identity is not a fallback; fix or
-   stop if it is.
+3. You do **not** set the artifact's status line and you do **not** commit — you
+   never mutate the checkout (spec 03 §"Evaluation-run validity"). The
+   recorder/root installs your verdict under `.docs/evaluations/<artifact-name>-eval.md`,
+   makes the status transition (`Approved` on PASS, `Draft` on FAIL), and commits
+   author-neutral (see `skills/loom-playbook/references/commit-convention.md`),
+   then follows the "Verify after committing" step there.
+4. Return your bounded verdict (below) and stop.
 
 ## Return to the orchestrator — bounded (ADR 0012)
 
-Your real output is the committed eval file. Your **final message to the
-orchestrator** is only: the eval **path**, the **`Verdict: PASS|FAIL`** and
-**`Round: n`**, and a **≤~150-token** one-line-per-blocker reason. **Never paste
-the full critique** up the chain — the orchestrator routes on the verdict alone;
-the findings live in `.docs/` for the author's next cold read. Keeping your return
-small keeps the orchestrator thin.
+Your real output is the verdict you produced to scratch — the recorder/root
+installs it as the durable `.docs/evaluations/<artifact-name>-eval.md` record.
+Your **final message to the orchestrator** is only: the **`Verdict: PASS|FAIL`**
+and **`Round: n`**, and a **≤~150-token** one-line-per-blocker reason. **Never
+paste the full critique** up the chain — the orchestrator routes on the verdict
+alone; the findings live in `.docs/` for the author's next cold read once the
+recorder has installed them. Keeping your return small keeps the orchestrator
+thin.
 
 ## Quality bar
 

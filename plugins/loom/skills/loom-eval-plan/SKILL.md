@@ -26,7 +26,10 @@ Target: the workflow argument (if empty, the next artifact at `Plan Review` or
    the cold launch itself; Claude: launch natively per
    `roles/plan-evaluator.md` / `agents/plan-evaluator.md` using its printed
    configuration). Give it those blind inputs only.
-3. The role writes `.docs/evaluations/<name>-eval.md` (PASS/FAIL + severity
-   findings), sets the artifact status (`Approved` on PASS, `Draft` on FAIL —
-   status line only), and commits author-neutral.
-4. Verify the commit; report the verdict and resulting status.
+3. The role **produces its verdict** (PASS/FAIL + severity findings) to its
+   confined scratch/output workspace, then returns — it does not write into
+   `.docs/evaluations/`, set the status line, or commit. The recorder/root
+   installs the verdict under `.docs/evaluations/<name>-eval.md`, makes the
+   status transition (`Approved` on PASS, `Draft` on FAIL), and commits
+   author-neutral.
+4. Verify the recorder's commit; report the verdict and resulting status.
