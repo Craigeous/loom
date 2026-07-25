@@ -17,7 +17,14 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-(none)
+- [errata-and-settled-record.md](errata-and-settled-record.md) — `Plan Review` —
+  docs-only record-keeping (remediation-1): flip the two settled archived plans
+  (`macos-dual-client-dogfood`, `coord-identifier-boundaries`) to `Archived`, reconcile
+  the status/index docs to settled reality, reconcile `handoff.md`'s contradictory NEXT
+  ACTION to `M1 slice 2 coord-lock-ownership`, append four 2026-07-24 audit errata
+  (ADR-0006 in-place rewrite; rebase-not-rebuild publication; direct-pushed CI fix; four
+  transition-branch non-uniform-identity commits), and fix the 48→12 hook-wire miscount.
+  No spec/ADR/state.json/product edits.
 
 ## Archived plans
 
