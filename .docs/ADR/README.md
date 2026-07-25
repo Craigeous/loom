@@ -17,7 +17,7 @@ Naming: `NNNN-short-title.md`. Lifecycle: `Draft → Plan Review → Accepted` (
 - [0003 — File-Based Cold Handoffs with a Commit per Handoff](0003-cold-handoffs-commit-per-handoff.md)
 - [0004 — Blind Evaluation by Controlled Inputs & Role Separation](0004-blind-evaluation-role-separation.md)
 - [0005 — Specs Frozen After Approval; Change Only via Planning](0005-specs-frozen-after-approval.md)
-- [0006 — Distribution as a Single-Plugin Self-Marketplace](0006-distribution-self-marketplace.md)
+- [0006 — Distribution as a Single-Plugin Self-Marketplace](0006-distribution-self-marketplace.md) — plugin-root location superseded by 0025 (implemented reality is the `./plugins/loom` subdir); rest of 0006 stands
 - [0007 — Namespaced Command Surface](0007-namespaced-command-surface.md) — supersedes the bare-`/loom` command-naming in 0001
 - [0008 — Parallel `.docs/` Coordination for Worktree-per-Slice](0008-parallel-docs-coordination-worktree-per-slice.md) — resolves OQ-A; builds on ADR 0003/0001
 - [0009 — Unaligned-migrate Sub-mode](0009-unaligned-migrate-sub-mode.md) — refines spec 06 §2 Unaligned; builds on ADR 0001/0005
