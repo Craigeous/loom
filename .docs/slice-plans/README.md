@@ -17,7 +17,7 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-- [playbook-conformance.md](playbook-conformance.md) — `Plan Review` —
+- [archive/playbook-conformance.md](archive/playbook-conformance.md) — `Plan Review` —
   remediation-3, the first `docs-governance/v1` §7 slice under ADR 0026's **broadened** class
   (prose bodies of `plugins/loom/**/*.md`): lands ADR 0026 (Accepted + ADR/README index + the two
   pre-placed 0026 records + evaluations index), then corrects three audit Theme-B prose drifts —
