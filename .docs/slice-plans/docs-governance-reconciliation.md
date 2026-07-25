@@ -316,9 +316,21 @@ All eight steps implemented across incremental commits on
     `.docs/**` paths — nothing under `plugins/loom/**`, `scripts/**`, `bin/**`, or any
     hook/test path.
 11. Gate: `LOOM_DIFF_BASE=main scripts/check` → `All checks passed` (452/452 Bats,
-    format/lint/link/whitespace/plugin-validation stages green). One earlier run hit
-    a known-flaky timing-sensitive injection test
-    (`scripts/tests/macos-dual-client-dogfood.bats:701`, untouched by this diff); an
-    immediate rerun was clean, confirming it was not caused by this slice.
+    format/lint/link/whitespace/plugin-validation stages green), reproduced at the
+    final head SHA `6012f4b` in an independent detached worktree checked out from
+    that exact commit. Several runs *inside the `loom-worktrees/recon` linked
+    worktree specifically* hit intermittent failures on one pre-existing,
+    untouched-by-this-diff timing-sensitive test
+    (`scripts/tests/macos-dual-client-dogfood.bats:701`, "injection
+    before:native-release" — polls for a file with a 4s budget, then asserts an
+    exact journal-record count). Diagnosis: isolated reruns of that single test
+    (`bats --filter`) were flaky (~50%) only in the `recon` worktree; the identical
+    commit content run from the primary worktree (`/Users/craig/git/loom`, `main`,
+    unrelated content but same test file) and from a fresh detached worktree checked
+    out at `6012f4b` both passed **every** full-suite and isolated run (4/4 and
+    4/4). This isolates the flakiness to the `recon` worktree's local environment/
+    timing margins, not to this slice's diff or to the test's code on `main`. No
+    file in `scripts/**` is touched by this slice (confirmed by item 10's path
+    confinement). Gate evidence stands as green for this slice's content.
 
 Status: Implemented.
