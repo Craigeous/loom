@@ -1,6 +1,6 @@
 # playbook-conformance
 
-Status: Approved
+Status: In Progress
 Slice type: docs-governance
 Class: docs-governance/v1
 Target specs: 03-artifact-lifecycle.md, 05-blind-evaluation.md (authority only — not edited)
