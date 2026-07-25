@@ -17,7 +17,7 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-- [docs-governance-reconciliation.md](docs-governance-reconciliation.md) — `Plan Review` —
+- [archive/docs-governance-reconciliation.md](archive/docs-governance-reconciliation.md) — `Plan Review` —
   first `docs-governance/v1` §7 slice under accepted ADR 0025: eight docs-only
   reconciliation edits (accept ADR 0025 + index; restore ADR 0006's pre-rewrite body +
   0025 forward note; correct ADRs 0014–0017 `Approved`→`Accepted` + README lifecycle;

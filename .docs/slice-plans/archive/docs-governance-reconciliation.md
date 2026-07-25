@@ -1,6 +1,6 @@
 # docs-governance/reconciliation — Remediation-2 reconciliation edits under ADR 0025
 
-Status: Implemented
+Status: Ready to Publish
 Slice type: docs-governance
 Class: docs-governance/v1
 Target specs: 03-artifact-lifecycle.md, 04-orchestrator.md
