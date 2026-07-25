@@ -97,10 +97,10 @@ Requested scope: the workflow argument (if empty, ask).
       before a slice lands*.
    e. On return, verify the recorder/root's author-neutral commit and the new
       status (the evaluator itself never commits — the recorder installs the
-      verdict and transitions status). On a code-eval PASS (status now `Ready to
-      Publish`), launch the developer's **finalize pass** (update `status/`,
-      archive the plan); the finalize/land sequence follows ADR 0020 (publish →
-      verify remote → receipt → `Landed`).
+      verdict and transitions status). On a code-eval PASS (status now
+      `Ready to Publish`), launch the developer's **finalize pass** (update
+      `status/`, archive the plan); the finalize/land sequence follows ADR 0020
+      (publish → verify remote → receipt → `Landed`).
    f. Honor the round limit (5 **FAIL** cycles per artifact → escalate = pause +
       summary; see spec 03 `## Round limits` for the counting + summary contract).
       Also escalate — **same pause + summary, but NOT round-counted** — on an
