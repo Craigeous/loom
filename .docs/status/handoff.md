@@ -16,6 +16,19 @@ source of truth; `roadmap.md` is milestone order.
 
 ## Where things stand
 
+- **Remediation-3 `playbook-conformance` LANDED — first exercise of ADR 0026's
+  broadened `docs-governance/v1` class.** ADR 0026 carried to `main` at
+  `Status: Accepted` (broadens the class to admit the prose body of
+  `plugins/loom/**/*.md`; frontmatter categorically out of class) alongside its
+  pre-placed cold plan-eval + owner-acceptance records and ADR/evaluations
+  index entries. The audit's three Theme-B prose drifts were corrected via an
+  exhaustive census (mechanical `rg` sweep, every hit FIX/LEAVE-triaged, zero
+  un-triaged): lifecycle (code-eval PASS → `Ready to Publish`, not `Landed`),
+  evaluator self-commit (evaluator writes to confined scratch and returns; the
+  recorder/root installs the verdict, transitions status, and commits), and
+  local-`main`-is-not-the-landing-authority (ADR 0020 §1, read-under-the-lock
+  coordination preserved). Pure prose-body edits, zero frontmatter lines
+  touched, `scripts/check` green. Slice-plan archived. **NEXT ACTION** below.
 - **M1 slice 1 `coord-identifier-boundaries` SETTLED (ADR-0023 receipt; result
   main 00582aa).** Centralized identifier validation landed in
   `plugins/loom/bin/loom-coord`: two-grammar split — strict `_valid_identifier`
@@ -325,12 +338,18 @@ source of truth; `roadmap.md` is milestone order.
   read-filter false-positive documented as accepted limitation in
   `commit-convention.md`, commit d35b565).
 
-0. **NEXT ACTION — after this docs-governance-reconciliation slice lands,
-   remediation-3 (playbook-conformance), then plan M1 slice 2
-   `coord-lock-ownership`.** M1 slice 1 (`coord-identifier-boundaries`) is SETTLED
-   (ADR-0023 receipt; result main `00582aa`) — see "Where things stand" above. Per
-   `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety",
-   `coord-lock-ownership` is next after remediation-3, then `coord-schema-cas`.
+0. **NEXT ACTION — remediation-3 (`playbook-conformance`) landed; two tracked
+   code-bearing follow-ups, then plan M1 slice 2 `coord-lock-ownership`.**
+   Remediation-3 is complete (see "Where things stand" above — ADR 0026 landed
+   Accepted, three Theme-B prose drifts corrected). Before M1 slice 2: (1)
+   **test-301 flake stabilization** (the `scripts/check` bats flake, unrelated to
+   the md edits), (2) the **trivial reconciliation `slice-plans/README`
+   Active-region residual** (the `docs-governance-reconciliation` entry still
+   shown under `## Active plans` pointing to `archive/`). M1 slice 1
+   (`coord-identifier-boundaries`) is SETTLED (ADR-0023 receipt; result main
+   `00582aa`). Per `.docs/repository-improvement-plan.md` § "M1 — Fix
+   coordinator safety", `coord-lock-ownership` is next after the two follow-ups,
+   then `coord-schema-cas`.
 
 0. **COMPLETED (historical) — owner-directed.** All post-M4 threads were
    **COMPLETE**: multi-session coordination (ADR 0014/0015/0016 → `loom-coord.sh` →

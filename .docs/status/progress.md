@@ -6,6 +6,33 @@ The status source of truth and decision index for building loom.
 
 ## Current state
 
+- **Last action — remediation-3 `playbook-conformance` (first exercise of ADR
+  0026's broadened `docs-governance/v1` class).** Two things landed: (1) **ADR
+  0026 carried to `main` at `Status: Accepted`** — broadens `docs-governance/v1`
+  to admit the **prose body** of `plugins/loom/**/*.md` (skills/roles/agents/
+  commands/references), with behavior-bearing YAML frontmatter categorically
+  out of class (§3 carve-out); the two pre-placed cold plan-eval + owner-acceptance
+  records and the ADR/evaluations indices were landed alongside it. (2) The
+  audit's three **Theme-B playbook/prose drifts** were corrected across an
+  exhaustive whole-tree census (mechanical `rg` sweep, every hit triaged
+  FIX/LEAVE, zero un-triaged): (a) **lifecycle** — a code-eval PASS advances a
+  slice to `Ready to Publish`, not `Landed` (`Landed` is later/stronger: a
+  verified remote result + publication receipt) — fixed in
+  `loom-eval-code/SKILL.md`, `code-evaluator.md`, `loom-run/SKILL.md`,
+  `status-machine.md` (adds `Ready to Publish`/`Accepted`/`Living` tokens),
+  `developer.md`, `commit-convention.md`, and `loom-playbook/SKILL.md`'s
+  lifecycle table; (b) **evaluator self-commit** — the evaluator never mutates
+  the checkout; it produces its verdict to confined scratch and returns, and the
+  recorder/root installs the verdict, transitions status, and commits — fixed
+  in `code-evaluator.md`, `plan-evaluator.md`, `loom-eval-code/SKILL.md`,
+  `loom-eval-plan/SKILL.md`, `loom-run/SKILL.md`, and `orchestration.md`'s core
+  commit doctrine; (c) **local-`main` is not the landing authority** (ADR 0020
+  §1) — corrected the false authoritative-local-`main` framing in
+  `parallelism.md` and `orchestration.md` while preserving the read-under-the-lock
+  coordination mechanic (ADR 0014/0015/0016) and the working-base use of local
+  `main`. Pure prose-body edits; zero frontmatter lines touched (verified by
+  diff); `scripts/check` green. Slice-plan archived to
+  `.docs/slice-plans/archive/playbook-conformance.md`.
 - **Last action — M1 slice 1 `coord-identifier-boundaries` SETTLED (ADR-0023
   receipt; result main 00582aa).** Centralized identifier validation landed in
   `plugins/loom/bin/loom-coord`: a two-grammar split — strict `_valid_identifier`
@@ -33,9 +60,14 @@ The status source of truth and decision index for building loom.
   slice diff):** `0ae81c1` — a Linux CI portability fix for `dir_mtime_epoch`'s
   GNU-vs-BSD `stat -f` divergence (T1 from the earlier multi-session-lock-helper
   thread, see `handoff.md`); hosted CI is green on both lanes.
-- **Next action:** plan the M1 slice 2 `coord-lock-ownership` slice (per
-  `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety"), after
-  this remediation-1 record-keeping slice.
+- **Next action:** after remediation-3 `playbook-conformance` lands (above), two
+  tracked **code-bearing follow-ups**: (1) **test-301 flake stabilization** (the
+  `scripts/check` bats flake unrelated to md edits), (2) the **trivial
+  reconciliation `slice-plans/README` Active-region residual** (the
+  `docs-governance-reconciliation` entry still shown under `## Active plans`
+  pointing to `archive/`); **then** plan the M1 slice 2 `coord-lock-ownership`
+  slice (per `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator
+  safety").
 - **Last action (owner decisions, 2026-07-24 — governance deferred-decisions
   resolved).** Two owner decisions were recorded and the governance slice's two
   deferred owner questions are now settled:
