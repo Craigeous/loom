@@ -1,6 +1,6 @@
 # playbook-conformance
 
-Status: In Progress
+Status: Implemented
 Slice type: docs-governance
 Class: docs-governance/v1
 Target specs: 03-artifact-lifecycle.md, 05-blind-evaluation.md (authority only — not edited)
@@ -482,3 +482,39 @@ Plus:
   explicitly deferred (ADR 0020 §Consequences names a later spec 03/04 amendment). Step 4 corrects
   the false authority claims in prose and points to ADR 0020; it does not invent new landing
   procedure.
+
+## Implementation Record
+
+Commits (`main...HEAD`): `a380ef3` (Step 1 — ADR 0026 landed Accepted + indices +
+pre-placed records), `56679d5` (Steps 2/3 — Pattern-A lifecycle + Pattern-B
+evaluator-self-commit fixes), `38d5b68` (Step 4 — Pattern-C local-`main`-authority
+fixes), `05e6340` (fix a mid-token line wrap that defeated the `Ready to Publish`
+grep in `loom-run/SKILL.md`), `ebae2ad` (Step 6 — status docs).
+
+Verification performed at this HEAD, matching the plan's Verification section:
+1. **Lifecycle** — `Ready to Publish` present in all four named files; the stale
+   `Landed.*on PASS|PASS \(Landed\)` grep returns zero; the bare-lifecycle grep
+   `\(code review\) *→ *Landed` returns zero; `status-machine.md` carries
+   `Ready to Publish`, `Accepted`, `Living` tokens.
+2. **Self-commit** — all six named files carry the recorder/root-installs-and-commits
+   correction; no remaining instruction telling the evaluator to write into
+   `.docs/evaluations/` or commit.
+3. **Parallelism** — the Pattern-C census grep over `parallelism.md`/`orchestration.md`
+   shows the three LEAVE lines (`parallelism.md:78/121/379`, text unchanged) and no
+   remaining local-`main`-as-authority framing at the seven FIX sites; an ADR 0020
+   remote-authority note is present at the Land subsection and the dispatch-scan text.
+4. **Frontmatter untouched** — `git diff main...HEAD` touches zero lines inside any
+   `---`-delimited frontmatter block; all four frontmatter-carrying files
+   (`loom-eval-code`, `loom-eval-plan`, `loom-playbook`, `loom-run` `SKILL.md`) close
+   `---` at line 4, and every hunk in them starts at line 27+.
+5. **Ledger-blob identity** — `git hash-object` on the two pre-placed 0026 records
+   returns `56d74dfc61c9a8fafcf2627fb61355f4b9f56078` and
+   `967200c287ad0ad4f5166b4862ac449206e1e337`, unchanged.
+6. **ADR 0026 body identity** — `diff <(git show b2614ce:...) .docs/ADR/0026-...md`
+   shows a single differing line: `Status: Plan Review` → `Status: Accepted`.
+7. **No out-of-class paths** — `git diff main...HEAD --name-only` contains only
+   allowlist paths; no `*.sh`/`bin`/hooks/`*.bats`/`*.json`/`scripts/**`/`spec/**`/
+   non-`0026` ADR.
+8. **Gate green** — `LOOM_DIFF_BASE=HEAD scripts/check` at this HEAD: 452/452 Bats,
+   repository-validation, link-check, Claude strict plugin validation, and diff
+   whitespace all passed; zero `not ok` lines. No test-301 flake observed this run.
