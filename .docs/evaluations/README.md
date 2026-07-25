@@ -52,6 +52,11 @@ PASS/FAIL + severity rules are in
   resolving PASS; advisory only.
 - [ADR 0025 reconciliation-authority owner acceptance](0025-reconciliation-authority-acceptance.md)
   — dispositive owner gate, Accepted 2026-07-25.
+- [ADR 0026 plugin prompt/doc scope plan evaluation](0026-docs-governance-plugin-prompt-doc-scope-eval.md)
+  — `bootstrap-ratification: degraded`; PASS round 0 with the frontmatter
+  carve-out MINOR folded in, resolving PASS; advisory only.
+- [ADR 0026 plugin prompt/doc scope owner acceptance](0026-docs-governance-plugin-prompt-doc-scope-acceptance.md)
+  — dispositive owner gate, Accepted 2026-07-25.
 
 See also [`../status/progress.md`](../status/progress.md) § "M0 errata" — the
 record-keeping reconciliation of four early-stretch process deviations found by the
