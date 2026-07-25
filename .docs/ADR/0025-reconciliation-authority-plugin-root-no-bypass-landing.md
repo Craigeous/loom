@@ -137,11 +137,18 @@ The mechanics, to be performed by the root only after the self-bootstrap gate in
   single class token `docs-governance/v1`. The root records `allowed_slices_before` (the
   freshly read live set) and `allowed_slices_after` (`before ∪ {docs-governance/v1}`) in
   the entry — exactly as ADR 0024 recorded its before/after at acceptance.
-- `docs-governance/v1` is a **persistent class marker**, not a settling slice: it is not
-  consumed by any slice settlement, is validated byte-for-byte immutable at every later
-  sequence, and is removed only when ADR 0023 §6's terminal sunset successor empties
-  `allowed_slices`. This narrowly supersedes ADR 0023 §6's add-never rule for that one
-  successor only; thereafter the remove-only rule resumes and no other slice may be added.
+- `docs-governance/v1` is a **persistent class marker**, not a settling slice: it authorizes
+  a recurring slice **class**, not a one-shot named slice, so it is not consumed by any slice
+  settlement. This is the one point where a docs-governance slice's settlement differs from
+  ADR 0023 §7 step 8: §7 step 8 removes a normal named slice from `allowed_slices` at its
+  settlement, but a concrete docs-governance slice settles by recording its immutable slice
+  **result entry + bound receipt** on the ledger (per §6) **without** removing the persistent
+  `docs-governance/v1` token — the token stays so the next class member can run under it.
+  The token is validated byte-for-byte immutable at every later sequence, and its removal is
+  governed **only by a future superseding ADR or by ADR 0023 §6's terminal sunset successor**
+  that empties `allowed_slices` — never by any single slice's settlement. This narrowly
+  supersedes ADR 0023 §6's add-never rule for that one successor only; thereafter the
+  remove-only rule resumes and no other slice may be added.
 
 #### B.2 How a docs-governance slice is eligible and runs §7
 
@@ -157,7 +164,8 @@ A concrete slice is **eligible under the class** — and thus §7-landable — w
    `plugins/loom/**`, `scripts/**`, `bin/**`, or any hook/helper/test path). A candidate
    touching any excluded path is not a docs-governance slice and must use the normal
    code-bearing procedure; and
-4. at settlement the slice records its result on the ledger like any §7 slice.
+4. at settlement the slice records its result entry and bound receipt on the ledger like any
+   §7 slice, **without** removing the persistent `docs-governance/v1` class token (per B.1).
 
 A docs-governance slice runs ADR 0023 §7's intent/settle ceremony with one substitution
 that resolves the evidence-shape gap the class creates. Because there is no product code
@@ -172,6 +180,17 @@ to find defects in, the §3 three-finder correctness/tests/security auxiliary pa
 - the standard §7 gate evidence and evaluator gate rerun: `scripts/check` run against the
   exact `head_sha` and rerun against a fresh copy (its link, whitespace, and
   plugin-validation checks are the mechanical gate for docs).
+
+**Landing mechanism across the `bootstrap-landing` handover.** A docs-governance slice binds
+to §7's intent → publish → settle *ordering*, not to any one transport. While ADR 0023's
+`bootstrap-landing` component is `available`, the slice lands via §7's bootstrap remote-direct
+procedure. After `bootstrap-landing` retires — at `remote-first-integration-candidate`
+settlement, past which every later publication uses the production landing helper —
+docs-governance slices land via that **production remote landing helper under ADR 0020's
+remote-publication authority** instead of the bootstrap remote-direct path. The intent/settle
+ordering, exact-revision binding, fresh verification, and bound receipt are identical either
+side of the handover; only the transport changes. A docs-governance slice therefore uses
+whichever landing mechanism is current at its settlement, and the retirement opens no gap.
 
 All ADR 0023 §2 exact-revision binding, §7 publication-intent → non-force target update →
 fresh verification → bound receipt → settlement ordering, degraded-bootstrap provenance
@@ -198,10 +217,15 @@ recorded deviations that predate this rule.
 Like ADR 0023 §1 ("cannot authorize its own acceptance retroactively") and ADR 0024 §2,
 this ADR **cannot have been published under the rule it creates**. Its landing path is:
 
-1. The planner commits **only** this ADR and its ADR-index entry at `Status: Plan Review`.
-   This is a **local commit that does not advance `origin/main`** (it is not pushed), so it
-   is not a §7 event and not a bypass — at Plan Review the everything-through-§7 rule is not
-   yet in force.
+1. The planner commits this ADR and its ADR-index entry at `Status: Plan Review`. This
+   Plan-Review draft has **already reached `origin/main`** (its blob is present at the
+   reviewed tip); it arrived there under the pre-Decision-B regime, before the
+   everything-through-§7 rule is in force, so its landing is a **B.3-class recorded pre-rule
+   deviation** (a docs-only Plan-Review push), not a bypass of a live rule. This ADR does not
+   claim the draft was never on `main`. What must still ride the §7 docs-governance slice is
+   not the draft but the ADR's **`Status: Accepted` disposition and live decision** (plus the
+   honest ADR-index/README updates); no direct `main` push carries the accepted document
+   (B.4 step 5).
 2. A **fresh cold plan evaluator**, distinct from the planner and root, evaluates it under
    ADR 0023's bootstrap controls, labeled `bootstrap-ratification: degraded` (this ADR is a
    different ADR than 0023's closed list, so this narrowly extends ADR 0023 §1's
@@ -222,16 +246,21 @@ this ADR **cannot have been published under the rule it creates**. Its landing p
    reconciliation slice planned in the later implementation step. **No direct bootstrap
    commit to `main` is required.**
 
-**The one unavoidable bootstrap edge, stated honestly:** the Plan-Review authoring commit,
-the eventual `Status: Accepted` authoring commit, and the B.1 ledger successor recording
-acceptance necessarily exist **before** the everything-through-§7 regime is enforceable on
-`main`. This is not a §7 bypass because **none of them advances the configured target ref
-`main`**: the two authoring commits are local (unpushed) until a §7 slice carries them, and
-the ledger successor is an ADR 0023 §6 transition-ref write on a separate branch. The single
-irreducible edge is therefore the §6 ledger write itself — a real remote write that predates
-the rule and is governed by ADR 0023 §6, not §7. This ADR does not paper over that edge; it
-locates it precisely (the ledger, not `main`) and bounds it (one create-and-verify successor,
-no force, no `main` advance), so no direct-push-to-`main` bootstrap commit is needed.
+**The bootstrap edges, stated honestly:** the Plan-Review authoring commit, the eventual
+`Status: Accepted` authoring commit, and the B.1 ledger successor recording acceptance all
+exist **before** the everything-through-§7 regime is enforceable on `main`. The Plan-Review
+authoring commit has **already reached `origin/main`** under the pre-Decision-B regime — a
+B.3-class recorded pre-rule deviation (a docs-only Plan-Review push), not a bypass of a live
+rule, since Decision B is not yet in force at Plan Review. Once Decision B is active the only
+remaining `main`-bound payload is the `Status: Accepted` transition, and that does **not**
+reach `main` by direct push: it rides the first §7 docs-governance slice (B.4 step 5). The
+B.1 ledger successor is an ADR 0023 §6 transition-ref write on a separate branch and never
+advances `main`. The single irreducible remote edge under the live rule is therefore the §6
+ledger write itself — a real remote write governed by ADR 0023 §6, not §7. This ADR does not
+paper over these edges; it locates them precisely (a Plan-Review push already recorded as a
+pre-rule deviation, and the §6 ledger write — neither being a live-rule `main` bypass) and
+bounds the one live-rule write (one create-and-verify successor, no force, no `main` advance),
+so no direct-push-to-`main` bootstrap commit is needed for the accepted document.
 
 ## Consequences
 
@@ -263,3 +292,29 @@ no force, no `main` advance), so no direct-push-to-`main` bootstrap commit is ne
   0016-misquotes-0015 fixes); and folding the §7/M2 duplication into the improvement plan's M2
   section. These land as the first `docs-governance/v1` §7 slice, which also carries this
   accepted ADR to `main`.
+
+## Notes — History
+
+- **2026-07-25, round-0 revision (pre-acceptance, Status still Plan Review).** Blind
+  ratification round 0 returned PASS with three MINOR refinements
+  (`.docs/evaluations/0025-reconciliation-authority-eval.md`); the owner directed folding
+  them in before acceptance, since ADRs are immutable once accepted. All round-0-sound
+  content is unchanged (Decision A supersession + 0006-restoration instruction; Decision B
+  no-bypass + §6 successor + `docs-governance/v1` class + docs-slice §7-evidence-without-finder-package;
+  self-bootstrap; retroactive deviation classification; deferred implementation edits). The
+  three edits:
+  1. **B.4 step 1 + the bootstrap-edge paragraph** — corrected the self-description of this
+     ADR's landing: the Plan-Review draft has already reached `origin/main` as a B.3-class
+     recorded pre-rule deviation (not "not pushed"); only the `Status: Accepted` disposition
+     and live decision ride the §7 docs-governance slice. No claim that the draft was never
+     on `main`.
+  2. **B.2** — added an explicit `bootstrap-landing` handover paragraph: docs-governance
+     slices land via §7's bootstrap remote-direct procedure while `bootstrap-landing` is
+     `available`, and via the production remote landing helper under ADR 0020's authority
+     after that component retires at `remote-first-integration-candidate` settlement. Ordering
+     survives the handover; only the transport changes.
+  3. **B.1 third bullet + B.2 item 4** — reconciled the persistent class token with ADR 0023
+     §7 step 8: `docs-governance/v1` authorizes a recurring slice class, so per-slice
+     settlement records a result entry + bound receipt (per §6) without removing the token;
+     the token's removal is governed only by a future superseding ADR or the §6 terminal
+     sunset, never by any single slice's settlement.
