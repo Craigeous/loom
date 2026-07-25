@@ -1,6 +1,6 @@
 # docs-governance/reconciliation — Remediation-2 reconciliation edits under ADR 0025
 
-Status: In Progress
+Status: Implemented
 Slice type: docs-governance
 Class: docs-governance/v1
 Target specs: 03-artifact-lifecycle.md, 04-orchestrator.md
@@ -289,5 +289,36 @@ Named mechanical checks (run from the worktree root):
   belong consolidated in `ADR/README.md` (chosen here, to keep immutable ADR bodies
   untouched) or as per-ADR `## Notes — Errata` forward-notes in the ADR-0001 style. The
   plan chooses the README-consolidated form; flag if the reviewer prefers per-ADR notes.
-</content>
-</invoke>
+
+## Gate evidence (developer, 2026-07-25)
+
+All eight steps implemented across incremental commits on
+`slice/docs-governance-reconciliation`. Verification re-run at the final head:
+
+1. 0006 body restoration: `diff` of the restored body (header + forward-note stripped)
+   against `git show 5e0b178^:.docs/ADR/0006-distribution-self-marketplace.md` →
+   byte-identical match.
+2. Status tokens: `Status: Accepted` present in `0014-0017` and `0025`; no
+   `Status: Approved` remains among them.
+3. README lifecycle corrected to `Draft → Plan Review → Accepted`; ADR 0025 moved to
+   `## Accepted`; `## In Review` is `None.`; 0006 entry notes the 0025 supersession.
+4. Both specs' `## Authority` cite 0024/0025; each carries an appended
+   `### ADR 0025 reconciliation` subsection.
+5. `rg -n "lib/loom-coord.sh" .docs/slice-plans/README.md` → no match; consolidated
+   errata subsection added to `ADR/README.md`; `lock must be heartbeat` absent from
+   0015.
+6. Deferred §7/M2 items folded into `repository-improvement-plan.md`'s M2 section.
+7. `progress.md` carries the Remediation-2 reconciliation errata subsection.
+8. `handoff.md` NEXT ACTION updated (both locations) to remediation-3 → M1 slice 2.
+9. Ledger-bound blobs unchanged: `git hash-object` on both 0025 evaluation records
+   still returns `0a91d3ca…`/`0e1c4d66…`.
+10. Path confinement: `git diff --name-only main...HEAD` shows only allowlisted
+    `.docs/**` paths — nothing under `plugins/loom/**`, `scripts/**`, `bin/**`, or any
+    hook/test path.
+11. Gate: `LOOM_DIFF_BASE=main scripts/check` → `All checks passed` (452/452 Bats,
+    format/lint/link/whitespace/plugin-validation stages green). One earlier run hit
+    a known-flaky timing-sensitive injection test
+    (`scripts/tests/macos-dual-client-dogfood.bats:701`, untouched by this diff); an
+    immediate rerun was clean, confirming it was not caused by this slice.
+
+Status: Implemented.
