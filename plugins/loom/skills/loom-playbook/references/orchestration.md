@@ -340,9 +340,13 @@ The orchestrator's driver-loop obligations:
 1. `loom-coord lock-acquire --session <id>` — acquire the cross-session lock.
    `0` acquired → proceed; `3` busy (backoff exhausted) → defer this main-side op,
    keep working other slices, retry later; `10` → abort.
-2. Re-read Active/claim state from **current local `main`** (authoritative under the
-   lock). `list-claims` (unlocked pre-scan) is a pre-filter only; the authoritative
-   re-check is always under the lock.
+2. Re-read Active/claim state from current local `main`, still **under the
+   lock** — the coordination mechanic is unchanged. `list-claims` (unlocked
+   pre-scan) is a pre-filter only; claim liveness is always re-checked under the
+   lock via the `refs/loom/claims/<slice>` lease refs. Local `main` is never the
+   landing/dispatch/claim **authority** (ADR 0020 §1; spec 03 §"Dispatch rules"
+   — "Dispatch never derives landing, claims, or current authority from local
+   `main`").
 3. `loom-coord claim <slice> --session <id>` — skip live-claimed slices (exit `4` →
    re-select another slice); `reclaim` stale ones (exit `6` holder still fresh →
    skip; exit `4` CAS failed → skip, holder alive).
@@ -354,9 +358,14 @@ The orchestrator's driver-loop obligations:
 Claim registration and land+finalize are the only locked shared-`main` writes; all
 other session activity is lock-free in the session's own worktree.
 
-**Dispatch scan derives from current local `main`** (not the frozen slice worktree
-snapshot). Pre-scan with `loom-coord list-claims` (unlocked, prints `slice\tsid\tts`
-rows); authoritative re-check always under the lock.
+**Dispatch scan reads `.docs/` on current local `main`** (not the frozen slice
+worktree snapshot) for coordination convenience, but current dispatch/landing
+**authority** derives from the **configured remote** (ADR 0020) — local `main`
+is a disposable mirror. Pre-scan with `loom-coord list-claims` (unlocked, prints
+`slice\tsid\tts` rows); claim liveness is re-checked always under the lock, via
+the lease refs. (The dispatch-scan mechanics' full reconciliation to ADR 0020 is
+deferred to a later spec 03/04 amendment — ADR 0020 §Consequences; this corrects
+the authority framing only.)
 
 **Fail-closed land guard:**
 - `loom-coord lock-verify --session <id>` immediately before `git merge`. Exit `5`
@@ -373,4 +382,7 @@ loom-coord session-end --session <id>
 **Deriving the dispatch scan:**
 - `loom-coord list-claims` provides an unlocked pre-filter of live sessions.
 - The orchestrator dispatches by reading `Status:` lines in `.docs/` slice-plans
-  on current local `main`; the claim state confirms which slices are actively held.
+  on current local `main` (a disposable mirror kept fresh for `.docs/` reads);
+  current landing/dispatch authority is never derived from local `main` (ADR
+  0020 §1) — the claim state confirms which slices are actively held via the
+  lease refs.

@@ -119,13 +119,16 @@ construction, not resolved after the fact.
 ### Agent-input freshness
 
 Worktrees are created from **current local `main`** (see the `git worktree add`
-command below), so each agent's `.docs/` snapshot is current as of spawn. loom
-commits to local `main` and does not push, so `origin/main` lags; consulting
-`origin/main` via `git fetch` is an **unlocked pre-filter only** — never
-authoritative. The authoritative "what has landed / what is claimed" read is always
-**current local `main` under the lock**. Cold agents (spec 04) receive focused inputs
-and do not read main's living docs mid-flight; the orchestrator holds the live picture
-and consults/updates the living docs between handoffs. No polling, no per-branch
+command below), so each agent's `.docs/` snapshot is current as of spawn. Per
+ADR 0020, landing publishes to the **configured remote target**, which is the
+**sole landing authority**; local `main` is a **disposable mirror/cache** and is
+never part of the landing transaction, dispatch authority, claim transaction, or
+recovery source (worktrees still branch off it as a working base — that mechanic
+is unchanged). The authoritative "what has landed / what is claimed" read is a
+**fresh read of the configured remote plus its publication receipt**, not local
+`main`. Cold agents (spec 04) receive focused inputs and do not read main's
+living docs mid-flight; the orchestrator holds the live picture and
+consults/updates the living docs between handoffs. No polling, no per-branch
 status replication.
 
 ---
@@ -147,8 +150,11 @@ git worktree add -b <slice-branch> <session-owned-path> main
 
 1. `loom-coord lock-acquire --session <id>` — acquire the cross-session lock
    (`0` proceed; `3` busy/backoff exhausted → defer and retry later; `10` → abort).
-2. Re-read Active/claim state from **current local `main`** (the authoritative
-   snapshot, now under the lock).
+2. Re-read Active/claim state from current local `main`, still **under the
+   lock** — the coordination mechanic is unchanged. Claim liveness derives from
+   the `refs/loom/claims/<slice>` lease refs via `loom-coord`; local `main` is
+   never the landing/dispatch/claim **authority** (ADR 0020 §1; spec 03
+   §"Dispatch rules").
 3. For each candidate slice:
    - `loom-coord claim <slice> --session <id>` — `0` claimed → proceed;
      `4` live peer already holds it → skip and re-select another slice;
@@ -193,6 +199,15 @@ orchestrator. They write only the three categories of slice-branch files listed
 above — they do not touch the living docs or the index.
 
 ### Land (orchestrator, from the main worktree — serialized, one slice at a time)
+
+**Superseded-by-ADR-0020 note.** The merge/mode mechanics below describe the
+pre-ADR-0020 local-`main`, no-push landing model; ADR 0020 (partially
+superseding ADR 0014) makes remote publication + fresh remote verification +
+receipt the landing authority instead — `Landed` is established only by that
+verified remote result and receipt, not by this local merge alone. The mode
+state machine's mechanical reconciliation to ADR 0020 is deferred to a later
+spec 03/04 planning amendment (ADR 0020 §Consequences); this note corrects the
+authority claim without rewriting the mechanics below.
 
 **Single-session (default):**
 
@@ -399,7 +414,7 @@ cross-session coordination is entirely via git refs and the `loom-coord` CLI:
 | **Claim a free slice** (under lock) | `claim <slice> --session <id>` | `0` claimed; `4` live peer → re-select; `5` lock not held → re-acquire; `10` → abort |
 | **Reclaim a stale slice** (under lock) | `reclaim <slice> --session <id>` | `0` reclaimed; `4` CAS failed (holder renewed) → skip; `5` lock not held or already owner; `6` holder still fresh → skip |
 | **Release lock** | `lock-release --session <id>` | `0` released; `5` not held |
-| **Dispatch pre-scan** (unlocked pre-filter) | `list-claims` | `0` prints `slice\tsid\tts` rows; authoritative re-check still done under the lock against current local `main` |
+| **Dispatch pre-scan** (unlocked pre-filter) | `list-claims` | `0` prints `slice\tsid\tts` rows; claim liveness re-checked under the lock via the lease refs — landing/current authority is never derived from local `main` (ADR 0020 §1) |
 | **Write-ahead checkpoint** (ADR 0013) | `checkpoint-write --session <id> "<next action>"` | `0`; `5` session not started |
 | **Read checkpoint on restart** | `checkpoint-read --session <id>` | `0` |
 | **Land subsumes claim release** (under lock) | `release-claim <slice> --session <id>` | `0` released; `5` lock not held or not owned |
