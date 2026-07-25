@@ -42,3 +42,22 @@ Naming: `NNNN-short-title.md`. Lifecycle: `Draft → Plan Review → Accepted` (
 ## In Review
 
 None.
+
+## Path and cross-reference errata (ADR 0025 reconciliation)
+
+Living-index corrections to stale paths/quotes cited by accepted (immutable) ADR
+bodies. The ADR decision prose is left untouched; the shipped reality is recorded
+here instead.
+
+- **Helper path.** ADRs 0015 (lines 17, 309) and 0016 (line 255) reference
+  `plugins/loom/lib/loom-coord.sh`; the shipped helper is
+  `plugins/loom/bin/loom-coord` (verify: `rg -n "loom/bin/loom-coord"
+  plugins/loom/`).
+- **Per-session state dir.** ADRs 0014 (line 105), 0015 (lines 108, 250), and 0016
+  (lines 176, 258) reference `.git/loom-session-<id>/`; the shipped layout is
+  `.git/loom/session-<id>/`.
+- **0016 misquotes 0015.** ADR 0016 line 187 attributes to ADR 0015 the phrase "the
+  lock must be heartbeat too"; that phrase does not appear in ADR 0015 (verify:
+  `rg -n "lock must be heartbeat" 0015-*.md` → no match). The substance —
+  heartbeating the lock ref — is 0016's own contribution, not a 0015 quote; this is
+  a misattribution erratum, not a substantive defect.

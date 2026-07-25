@@ -107,7 +107,7 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
   multi-session coordination thread end-to-end.
 
 - [archive/multi-session-lock-helper-plan.md](archive/multi-session-lock-helper-plan.md) — `Archived` —
-  ADR 0014/0015/0016: loom's **first non-hook CLI helper** `plugins/loom/lib/loom-coord.sh`
+  ADR 0014/0015/0016: loom's **first non-hook CLI helper** `plugins/loom/bin/loom-coord`
   (+ `loom-coord.bats`) — git-`update-ref` CAS lock on `refs/loom/lock` + per-slice claim refs
   on `refs/loom/claims/<sha1>` (ABA-safe; ADR 0016) + lease-freshness liveness + `{pid,start-time}`
   background renewer (ADR 0015). Fails closed. Shell-gated. Gate green 64/64; code-eval PASS
