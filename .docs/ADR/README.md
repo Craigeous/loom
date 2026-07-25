@@ -40,4 +40,4 @@ Naming: `NNNN-short-title.md`. Lifecycle: `Draft → Plan Review → Approved` (
 
 ## In Review
 
-None.
+- [0025 — Reconciliation Authority: Plugin-Root Supersession and No-Bypass §7 Target Landing](0025-reconciliation-authority-plugin-root-no-bypass-landing.md) — **supersedes ADR 0006** on the plugin-root location (re-decides the implemented `./plugins/loom` subdir; directs restoring 0006's pre-rewrite body); establishes that every commit advancing `origin/main` lands through ADR 0023 §7 with no direct-push bypass class, and **narrowly amends ADR 0023 §1/§6/§7** to add a persistent `docs-governance/v1` slice class (blind plan-eval + cold docs code-eval + gate as its §7 evidence, no finder package); self-bootstraps via cold plan-eval + owner acceptance gate
