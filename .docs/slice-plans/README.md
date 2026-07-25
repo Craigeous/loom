@@ -17,7 +17,15 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-*(none)*
+- [docs-governance-reconciliation.md](docs-governance-reconciliation.md) — `Plan Review` —
+  first `docs-governance/v1` §7 slice under accepted ADR 0025: eight docs-only
+  reconciliation edits (accept ADR 0025 + index; restore ADR 0006's pre-rewrite body +
+  0025 forward note; correct ADRs 0014–0017 `Approved`→`Accepted` + README lifecycle;
+  harmonize specs 03/04 authority + closed-list/landing statements with the 0024 dogfood
+  slices and the 0025 docs class; consolidated ADR path errata; fold the §7/M2 deferred
+  items into the improvement plan; append the remediation-2 reconciliation errata to
+  progress.md; repoint handoff NEXT ACTION). Path-confined to `.docs/**` + root docs; no
+  product/executable/test change.
 
 ## Archived plans
 
