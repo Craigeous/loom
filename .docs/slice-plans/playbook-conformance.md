@@ -17,8 +17,8 @@ This is the deferred **remediation-3 (playbook-conformance)** work that ADR 0026
 Two things happen here:
 
 1. **Land ADR 0026 into `main`.** ADR 0026 was authored/ratified on a staging branch and
-   owner-accepted, but is **not yet in `origin/main`** (worktree HEAD `06246d0` does not
-   contain the ADR file). Per ADR 0026 §5.5 the accepted document reaches `main` as the
+   owner-accepted, but is **not yet in `origin/main`** (this branch — nor `origin/main` —
+   contains the ADR file). Per ADR 0026 §5.5 the accepted document reaches `main` as the
    payload of a docs-governance §7 slice — this one. Its blind plan-eval verdict and owner
    acceptance are the two pre-placed records already in the worktree.
 2. **Fix three prompt/documentation drifts** the audit's Theme-B findings identified between
@@ -116,7 +116,7 @@ landing helper, not asserted on code-eval PASS. Correct the stale "set `Landed` 
     (line 16) to "configured remote result independently verified and receipt recorded" (not
     "code approved; finalize underway"). Keep spec 03 as the single-source pointer.
 
-**Cross-scan siblings carrying the identical drift** (Step 5; fold the same correction in):
+**Cross-scan siblings carrying the identical drift** (Step 5 census; fold the same correction in):
 - `plugins/loom/roles/developer.md` line 13 — "A slice's code-eval returned PASS (`Landed`) —
   run the finalize pass" → the PASS target is `Ready to Publish`; correct the `(Landed)`
   equivalence. Do **not** redesign finalize-pass timing beyond this token correction; if the
@@ -125,6 +125,15 @@ landing helper, not asserted on code-eval PASS. Correct the stale "set `Landed` 
 - `plugins/loom/skills/loom-playbook/references/commit-convention.md` line 78 — the example
   commit message `Evaluate week-rollover slice: PASS (Landed)` encodes the stale equivalence →
   change the parenthetical to `(Ready to Publish)`.
+- `plugins/loom/skills/loom-playbook/SKILL.md` line 38 — **(round-0 miss, added on revision)** the
+  playbook's own artifact-table slice-plan lifecycle string is byte-identical stale:
+  `Draft → Plan Review → Approved → In Progress → Implemented → (code review) → Landed → Archived`
+  (missing `Ready to Publish`). **Insert `Ready to Publish` between `(code review)` and `Landed`**
+  so it reads `… → (code review) → Ready to Publish → Landed → Archived`, matching the
+  `status-machine.md:58-59` correction. This is **body prose** — the SKILL frontmatter closes at
+  line 4; line 38 is far below it. Added to the Path allowlist on revision. (This copy is invisible
+  to the Step-2 `set … Landed`/`Landed … PASS` greps because it has no `PASS`/`set` adjacency — the
+  revised Verification #1 adds a bare-lifecycle grep that catches it; see Step 5 census.)
 
 ### Step 3 — Evaluator self-commit drift (audit Theme-B finding 2)
 
@@ -142,29 +151,44 @@ the recorder/root installs the verdict, makes the status transition, and commits
 
 - `plugins/loom/roles/plan-evaluator.md` — step 2 (line 44, "Write the verdict to
   `.docs/evaluations/…`"), step 3 (line 54, "Set the artifact's status line"), step 4 (lines
-  56-59, "Commit … and stop … Verify after committing"): rewrite so the evaluator writes its
+  56-58, "Commit … and stop … Verify after committing"), **and** the bounded-return line 63
+  ("Your real output is the committed eval file"): rewrite so the evaluator writes its
   verdict to the confined output workspace and returns the bounded verdict; the recorder/root
-  installs it, performs the `Approved`-on-PASS / `Draft`-on-FAIL transition, and commits. Keep
-  the round-counting rule and the blind-contract text intact.
+  installs it, performs the `Approved`-on-PASS / `Draft`-on-FAIL transition, and commits. Reword
+  line 63 so the durable record is the **recorder-installed** verdict (not an evaluator commit).
+  Keep the round-counting rule and the blind-contract text intact.
 - `plugins/loom/roles/code-evaluator.md` — step 4 (line 43, "Write the verdict to
   `.docs/evaluations/…`"), step 5 (line 59, sets status — the same sentence Step 2 corrects for
-  the PASS target), step 6 (lines 62-65, "Commit … and stop … Verify after committing"): same
+  the PASS target), step 6 (lines 62-64, "Commit … and stop … Verify after committing"), **and**
+  the bounded-return line 69 ("Your real output is the committed eval file"): same
   rewrite — evaluator writes to confined scratch and returns; recorder/root records the verdict,
-  transitions to `Ready to Publish` (PASS) / `In Progress` (FAIL), and commits. Preserve the
-  gate-rerun requirement and adjudication text.
+  transitions to `Ready to Publish` (PASS) / `In Progress` (FAIL), and commits; reword line 69 as
+  for plan-evaluator line 63. Preserve the gate-rerun requirement and adjudication text.
+
+*(Step-anchor line numbers above are advisory — the developer trusts the Step 5 census grep, not
+the cited line, per the round-0 eval's MINOR on anchor drift.)*
 
 **Cross-scan siblings carrying the identical drift** (Step 5; fold the same correction in):
 - `plugins/loom/skills/loom-eval-code/SKILL.md` lines 27-31 — "The role … writes
   `.docs/evaluations/<slice>-eval.md` …, sets status …, and commits author-neutral" +
   "Verify the commit" → the role produces the verdict to scratch and returns; the recorder/root
   records + transitions + commits. **Body edit only (frontmatter present).**
-- `plugins/loom/skills/loom-eval-plan/SKILL.md` lines 29-31 — "The role writes
-  `.docs/evaluations/<name>-eval.md` …, sets status …, and commits author-neutral" → same
-  correction. **Body edit only (frontmatter present).**
+- `plugins/loom/skills/loom-eval-plan/SKILL.md` lines 29-32 — "The role writes
+  `.docs/evaluations/<name>-eval.md` …, sets status …, and commits author-neutral" (29-31) **and**
+  "Verify the commit; report the verdict and resulting status" (32) → same
+  correction: the role produces the verdict to scratch and returns; the recorder/root records +
+  transitions + commits. **Body edit only (frontmatter present).**
 - `plugins/loom/skills/loom-run/SKILL.md` — the step-e "verify the author-neutral commit and the
   new status" wording (line 98) presumes the evaluator committed; align it to recorder/root
   recording. **Body edit only (frontmatter present).** (Keep this minimal — the orchestrator does
   verify a commit exists; the correction is that the *evaluator* is not the committer.)
+- `plugins/loom/skills/loom-playbook/references/orchestration.md` lines 24-25 —
+  **(round-0-census addition)** "**Commit per handoff, author-neutral.** Agents commit their own
+  work; verify a commit landed …" reads universally and thus wrongly implies the *evaluator*
+  commits. Narrow it: **producing** roles commit their own work; **evaluation verdicts are
+  installed and committed by the recorder/orchestrator** (spec 03 §"Evaluation-run validity"; the
+  evaluator never mutates the checkout). Keep the author-neutral / verify-a-commit-landed doctrine.
+  **Body prose (orchestration.md has no frontmatter).**
 
 ### Step 4 — Parallelism drift: local-main is not the landing authority (audit Theme-B finding 3)
 
@@ -176,13 +200,25 @@ rules": "Dispatch never derives landing, claims, or current authority from local
 `plugins/loom/skills/loom-playbook/references/parallelism.md` still asserts the pre-ADR-0020
 model. Correct the specific false claims in prose:
 
-- §"Agent-input freshness" (lines 120-129): "loom commits to local `main` and does not push, so
+- §"Agent-input freshness" (lines 123, 126): "loom commits to local `main` and does not push, so
   `origin/main` lags … The authoritative 'what has landed / what is claimed' read is always
   current local `main` under the lock." → State ADR 0020: landing publishes to the **configured
   remote target**, which is the sole landing authority; local `main` is a **disposable
   mirror/cache**, never the landing/dispatch/claim authority; the authoritative "what has landed"
   read is a fresh read of the configured remote plus the publication receipt. (Worktrees may still
-  branch off local `main` as a working base — that mechanic is unchanged.)
+  branch off local `main` as a working base — that mechanic is unchanged; see the LEAVE rows in the
+  Step 5 census for lines 78/121/379.)
+- **(round-0 misses, added on revision)** the claim/dispatch re-read lines that frame
+  **current local `main`** as "the authoritative snapshot" — `parallelism.md:150` ("Re-read
+  Active/claim state from **current local `main`** (the authoritative snapshot, now under the
+  lock)") and `parallelism.md:402` (table row: "authoritative re-check still done under the lock
+  against current local `main`"). Apply the **identical reconciliation given to
+  `orchestration.md:340`**: the claim/Active state is still **re-read under the lock** (the
+  coordination mechanic is preserved), but the **"authoritative local `main`" framing is removed** —
+  claim liveness derives from the `refs/loom/claims/` lease refs via `loom-coord`, and
+  landing/current authority is never derived from local `main` (spec 03 §"Dispatch rules" line 326;
+  ADR 0020 §1). This resolves the preserve-vs-fix ambiguity the round-0 eval flagged: **keep the
+  read-under-the-lock, drop the authoritative-local-`main` wording.**
 - The Land subsection (lines 195-235) and §"What stays serial" (line ~342's "loom commits
   directly to local main") describe merge-onto-local-`main` with no push as the landing act. Add a
   concise **superseded-by-ADR-0020 note** at the Land subsection: the landing authority is remote
@@ -194,38 +230,124 @@ model. Correct the specific false claims in prose:
 - Preserve the multi-session lock/claim coordination model (ADR 0014/0015/0016 via `loom-coord`) —
   it is orthogonal to landing authority and is **not** superseded by ADR 0020.
 
-**Cross-scan sibling carrying the identical drift** (Step 5; fold the same correction in):
+**Cross-scan siblings carrying the identical drift** (Step 5 census; fold the same correction in):
 - `plugins/loom/skills/loom-playbook/references/orchestration.md` line 340 — "Re-read
   Active/claim state from current local `main` (authoritative under the lock…)" carries the same
   local-main-authoritative claim → reconcile the same way: coordination/claim state is read under
   the lock, but landing/current-authority is never derived from local `main` (spec 03; ADR 0020).
+- `plugins/loom/skills/loom-playbook/references/orchestration.md` lines 354 and 373 —
+  **(round-0-census additions)** "**Dispatch scan derives from current local `main`**" (354) and
+  "the orchestrator dispatches by reading `Status:` lines … **on current local `main`**" (373)
+  directly contradict spec 03 line 326 ("Dispatch never derives … claims, or current authority from
+  local `main`"). Reconcile with the same bounded touch: dispatch derives current authority from the
+  **configured remote (ADR 0020)**; claim liveness from the lease refs under the lock; local `main`
+  is a disposable mirror. **Do NOT rewrite the dispatch/mode mechanics** (deferred to the spec 03/04
+  amendment per ADR 0020 §Consequences) — correct the authority framing and NOTE the deferred
+  mechanical reconciliation.
 
-### Step 5 — VERIFY-DON'T-ASSUME (developer performs before finalizing)
+### Step 5 — EXHAUSTIVE CROSS-SCAN CENSUS (mechanical, zero-miss, reproducible)
 
-The planner already ran this cross-scan; the developer re-confirms against the live tree at
-implementation time (the audit describes the drift; verify each still exists before editing, and
-do not "fix" anything already correct):
+The planner ran an **exhaustive whole-tree sweep** over `plugins/loom/**/*.md` prose bodies for
+each of the three drift patterns (revised after the round-0 FAIL, which caught three misses). The
+**exact grep commands** are baked below so the developer and re-evaluator reproduce the identical
+hit set with zero miss. Every hit is enumerated with a **FIX** or **LEAVE** decision and a one-line
+reason. Run all six greps at `head_sha`; the counts and file:lines must match this census exactly
+(if the live tree differs — a hit already corrected or new text — adjust the affected Step and
+record it in `## Notes`; do not fix a non-problem, do not miss a real one).
+
+#### Pattern A — lifecycle: code-eval PASS ≠ `Landed`
 
 ```
-# Lifecycle drift (should show the six occurrences named in Step 2):
-rg -n 'Landed.*(on )?PASS|PASS.*\(?Landed|set .*Landed' plugins/loom --glob '*.md'
-# Evaluator self-commit drift:
-rg -n 'Write the verdict to|writes .*eval\.md|sets status|and commits author-neutral' \
-  plugins/loom/roles/*evaluator.md plugins/loom/skills/loom-eval-*/SKILL.md
-# Parallelism / local-main authority drift:
-rg -n "commits to local .?main|does not push|authoritative.*local .?main|local .?main.*authoritative" \
-  plugins/loom --glob '*.md'
+rg -n 'Landed' plugins/loom --glob '*.md'
+rg -n 'Code Review|→ *Landed|set .*Landed' plugins/loom --glob '*.md'
 ```
-If any location is already correct or its text differs from the audit's description, adjust the
-Step and record it in `## Notes` — do not fix a non-problem, do not miss a real one. If the
-cross-scan surfaces an occurrence **beyond** those enumerated in Steps 2-4, apply the same
-correction, add the file to the allowlist, and NOTE it.
 
-**Planner cross-scan result (2026-07-25, all three drifts CONFIRMED PRESENT, none pre-fixed):**
-the additional same-drift occurrences already folded into Steps 2-4 are `developer.md:13` +
-`commit-convention.md:78` (lifecycle), `loom-eval-code/SKILL.md:27-31` +
-`loom-eval-plan/SKILL.md:29-31` + `loom-run/SKILL.md:98` (self-commit), and
-`orchestration.md:340` (local-main). See Notes for the scope-expansion flag.
+Census (9 `Landed` hits; every one FIXED — the drift is treating a code-eval PASS as *reaching*
+`Landed`, or a lifecycle string that skips `Ready to Publish`. Note `Landed` itself is a **real
+final state**: the fix inserts `Ready to Publish` before it / corrects its meaning, it never
+deletes the `Landed → Archived` tail, which is correct):
+
+| file:line | decision | reason |
+|---|---|---|
+| `skills/loom-eval-code/SKILL.md:29` | FIX (Step 2) | "`Landed` on PASS" — PASS advances to `Ready to Publish`. |
+| `skills/loom-playbook/SKILL.md:38` | **FIX (Step 2, round-0 miss)** | artifact-table lifecycle string omits `Ready to Publish`; no `PASS`/`set` adjacency so the old grep missed it. |
+| `skills/loom-playbook/references/commit-convention.md:78` | FIX (Step 2) | example commit `PASS (Landed)` → `(Ready to Publish)`. |
+| `skills/loom-playbook/references/status-machine.md:16` | FIX (Step 2) | `Landed` row meaning "code approved; finalize underway" → "remote result verified + receipt recorded"; token kept (real state). |
+| `skills/loom-playbook/references/status-machine.md:29` | FIX (Step 2) | dispatch table — add a `Ready to Publish` row; keep the `Landed` row (valid final state). |
+| `skills/loom-playbook/references/status-machine.md:59` | FIX (Step 2) | lifecycle string — insert `Ready to Publish` before `Landed`. |
+| `roles/code-evaluator.md:59` | FIX (Step 2/3) | "Set … `Landed` on PASS" → recorder sets `Ready to Publish`. |
+| `skills/loom-run/SKILL.md:99` | FIX (Step 2) | "On a `Landed` code-eval PASS" → on a code-eval PASS (status now `Ready to Publish`). |
+| `roles/developer.md:13` | FIX (Step 2) | "PASS (`Landed`)" → PASS target is `Ready to Publish`. |
+
+No LEAVE rows: every `Landed` occurrence is either drift or a state-row/lifecycle-tail whose
+meaning the census corrects in place.
+
+#### Pattern B — evaluator self-commit
+
+```
+rg -n 'commit' plugins/loom/roles plugins/loom/skills --glob '*.md'
+```
+
+Scope the result to **evaluator/eval contexts** (the drift = instructing the *evaluator* to write
+into `.docs/evaluations/`, set status, and commit — spec 03 §"Evaluation-run validity", spec 05
+§"Fresh per-run workspace": the evaluator never mutates the checkout; the recorder/root installs +
+transitions + commits). Producer-role and rubric/orchestrator commits are **correct** and LEFT.
+
+| file:line | decision | reason |
+|---|---|---|
+| `roles/code-evaluator.md:43` | FIX (Step 3) | "Write the verdict to `.docs/evaluations/…`" → write to confined scratch, return. |
+| `roles/code-evaluator.md:59` | FIX (Step 2/3) | "Set … status" → recorder sets status. |
+| `roles/code-evaluator.md:62-64` | FIX (Step 3) | "Commit … and stop … Verify after committing" → recorder commits. |
+| `roles/code-evaluator.md:69` | **FIX (Step 3, census)** | bounded-return "your real output is the committed eval file" implies evaluator commits → recorder-installed verdict. |
+| `roles/plan-evaluator.md:44` | FIX (Step 3) | "Write the verdict to `.docs/evaluations/…`" → confined scratch. |
+| `roles/plan-evaluator.md:54` | FIX (Step 3) | "Set the artifact's status line" → recorder transitions. |
+| `roles/plan-evaluator.md:56-58` | FIX (Step 3) | "Commit … and stop … Verify after committing" → recorder commits. |
+| `roles/plan-evaluator.md:63` | **FIX (Step 3, census)** | bounded-return "committed eval file" — as code-evaluator:69. |
+| `skills/loom-eval-code/SKILL.md:28` | FIX (Step 3) | "writes `…-eval.md`, sets status … commits" → recorder records. |
+| `skills/loom-eval-code/SKILL.md:31` | FIX (Step 3) | "Verify the commit" presumes evaluator committed. |
+| `skills/loom-eval-plan/SKILL.md:29-31` | FIX (Step 3) | "writes `…-eval.md`, sets status … commits author-neutral". |
+| `skills/loom-eval-plan/SKILL.md:32` | **FIX (Step 3, census)** | "Verify the commit; report … resulting status" presumes evaluator committed. |
+| `skills/loom-run/SKILL.md:98` | FIX (Step 3) | step-e "verify the author-neutral commit and new status" presumes the *evaluator* committed. |
+| `references/orchestration.md:24-25` | **FIX (Step 3, census)** | "Agents commit their own work" reads universally → narrow to producing roles; evaluation verdicts recorder-committed. |
+| `roles/planner.md:30,32` | LEAVE | producer role — the planner **does** commit its own artifact. |
+| `roles/developer.md:40,42,43` | LEAVE | producer role — developer commits its own slice. |
+| `roles/researcher.md:34-37` | LEAVE | producer role — researcher commits its own note. |
+| `skills/loom-develop/SKILL.md:27,30` | LEAVE | producer wrapper — developer commits. |
+| `skills/loom-research/SKILL.md:27-28` | LEAVE | producer wrapper — researcher commits. |
+| `references/code-eval-rubric.md:63` | LEAVE | rubric **checks** the developer's commit; not an evaluator self-commit instruction. |
+| `references/orchestration.md:159,199-203` | LEAVE | review-findings captured/committed by the **orchestrator** (correct). |
+| `references/review-findings.md:3,5,42` | LEAVE | review-findings is an orchestrator-committed record (correct). |
+| other `commit-convention.md` / handoff-doctrine hits | LEAVE | general author-neutral convention, not evaluator-scoped. |
+
+#### Pattern C — parallelism: local-`main` is not the landing/dispatch/claim authority
+
+```
+rg -n 'local .*main|does not push|authoritative.*main|commit.*to.*main' plugins/loom --glob '*.md'
+```
+
+Drift = teaching local-`main`-is-landing/dispatch/claim-authority (contradicts ADR 0020 §1
+remote-first and spec 03 line 326). **Correct usage LEFT** = worktrees *branching off* local
+`main` as a working base (ADR 0020 preserves this), and the index-bucket coordination model
+(ADR 0008/0014, orthogonal to landing authority).
+
+| file:line | decision | reason |
+|---|---|---|
+| `references/parallelism.md:78` | LEAVE | index-bucket "orchestrator-owned, main-only, serialized" — ADR 0008/0014 coordination, not ADR 0020 landing authority. |
+| `references/parallelism.md:121` | LEAVE | "worktrees created from current local `main`" — working base, explicitly preserved by ADR 0020. |
+| `references/parallelism.md:123` | FIX (Step 4) | "commits to local `main` and does not push, `origin/main` lags" — the no-push landing model. |
+| `references/parallelism.md:126` | FIX (Step 4) | "authoritative … current local `main` under the lock" read framing. |
+| `references/parallelism.md:150` | **FIX (Step 4, round-0 miss)** | "the authoritative snapshot … local `main`" — keep read-under-lock, drop authoritative framing. |
+| `references/parallelism.md:379` | LEAVE | "worktrees (branched from local `main`)" — working base. |
+| `references/parallelism.md:402` | **FIX (Step 4, round-0 miss)** | table row "authoritative re-check … against current local `main`" — same reconciliation. |
+| `references/orchestration.md:340` | FIX (Step 4) | "Re-read Active/claim state from current local `main` (authoritative under the lock)". |
+| `references/orchestration.md:354` | **FIX (Step 4, census)** | "Dispatch scan derives from current local `main`" contradicts spec 03:326. |
+| `references/orchestration.md:373` | **FIX (Step 4, census)** | "dispatches by reading `Status:` lines … on current local `main`" — same; bounded authority-framing fix, mechanics deferred. |
+
+**Exhaustiveness assertion:** the six greps above are the complete detection set. Every hit each
+grep returns over `plugins/loom/**/*.md` is enumerated in one of the three census tables with a
+FIX/LEAVE decision — there are **no un-triaged hits**. The two ledger-bound 0026 records
+(blobs `967200c2`/`56d74dfc`) and all frontmatter blocks are out of the sweep by construction
+(census targets prose bodies only).
 
 ### Step 6 — Status finalize (record remediation-3; set NEXT ACTION)
 
@@ -253,16 +375,24 @@ Named mechanical checks (all run at `head_sha`):
    plugins/loom/roles/code-evaluator.md plugins/loom/skills/loom-run/SKILL.md
    plugins/loom/skills/loom-playbook/references/status-machine.md` shows the corrected target;
    `rg -n 'Landed.*on PASS|PASS \(Landed\)' plugins/loom --glob '*.md'` returns **zero** stale
-   "PASS ⇒ Landed" equivalences. `status-machine.md` now contains `Ready to Publish`, `Accepted`,
+   "PASS ⇒ Landed" equivalences. **Bare-lifecycle grep (round-0 addition — catches strings with no
+   `PASS`/`set` adjacency):** `rg -n '\(code review\) *→ *Landed' plugins/loom --glob '*.md'`
+   returns **zero** — every slice-plan lifecycle string now routes `(code review) → Ready to
+   Publish → Landed` (this is the check that would have caught `loom-playbook/SKILL.md:38` and
+   `status-machine.md:59`). `status-machine.md` now contains `Ready to Publish`, `Accepted`,
    and `Living` tokens (`rg -n 'Ready to Publish|Accepted|Living' status-machine.md`).
 2. **Self-commit corrected** — `rg -n 'evaluator .*never mutates|writes .*to .*scratch|recorder .*commits|to its .*(scratch|output) workspace'`
    across `roles/*evaluator.md` + `skills/loom-eval-*/SKILL.md` shows the recorder/root-commits
    model; no remaining instruction telling the evaluator to write into `.docs/evaluations/` and
    commit.
-3. **Parallelism corrected** — `rg -n 'does not push|authoritative.*local .?main'
+3. **Parallelism corrected** — the Pattern-C census grep
+   `rg -n 'local .*main|does not push|authoritative.*main|commit.*to.*main'
    plugins/loom/skills/loom-playbook/references/parallelism.md
-   plugins/loom/skills/loom-playbook/references/orchestration.md` no longer asserts local-`main`
-   landing authority; an ADR 0020 remote-authority note is present.
+   plugins/loom/skills/loom-playbook/references/orchestration.md` shows the three LEAVE lines
+   (`parallelism.md:78/121/379` — working-base/index-bucket, unchanged) and **no remaining**
+   local-`main`-as-landing/dispatch/claim-**authority** framing at the seven FIX lines
+   (`parallelism.md:123/126/150/402`, `orchestration.md:340/354/373`); an ADR 0020 remote-authority
+   note is present at the parallelism Land subsection and the orchestration dispatch-scan text.
 4. **Frontmatter untouched (ADR 0026 §4.0 gate)** — `git diff <base>..<head>` shows **zero**
    changed lines inside any `---`-delimited frontmatter block of any `plugins/loom/**/*.md`. Only
    three target files carry frontmatter (`loom-eval-code/SKILL.md`, `loom-eval-plan/SKILL.md`,
@@ -303,6 +433,7 @@ Prose bodies of the following `plugins/loom/**/*.md` files (**body text only —
 - `plugins/loom/skills/loom-playbook/references/parallelism.md`
 - `plugins/loom/skills/loom-playbook/references/orchestration.md`
 - `plugins/loom/skills/loom-playbook/references/commit-convention.md`
+- `plugins/loom/skills/loom-playbook/SKILL.md` *(round-0 addition — body only; frontmatter closes line 4, line 38 is prose)*
 
 Plus:
 - `.docs/ADR/0026-docs-governance-plugin-prompt-doc-scope.md` and `.docs/ADR/README.md`
@@ -317,15 +448,29 @@ Plus:
 
 ## Notes
 
+- **Revision (round 0 → round 1).** After the blind plan-eval FAIL
+  (`.docs/evaluations/playbook-conformance-plan-eval.md`, round 1: class-eligibility +
+  drift-accuracy PASSED, verdict FAIL on **incomplete cross-scan**), this plan was revised to
+  (a) add the round-0 misses — `skills/loom-playbook/SKILL.md:38` (lifecycle; added to allowlist +
+  Step 2 + a bare-lifecycle Verification grep) and `parallelism.md:150`/`:402` (local-`main`;
+  Step 4, preserve-vs-fix ambiguity resolved: keep read-under-lock, drop authoritative framing);
+  (b) replace Step 5 with an **exhaustive mechanical census** (six exact greps, every hit triaged
+  FIX/LEAVE with a reason); and (c) fold two further same-drift hits the census surfaced —
+  `orchestration.md:354`/`:373` (dispatch-derives-from-local-`main`, contra spec 03:326) and the
+  universal `orchestration.md:24-25` "agents commit their own work" line. Status stays Plan Review.
 - **Scope-expansion flag (for the evaluator/owner).** The task named a specific file set per
-  drift. Step 5's mandated cross-scan surfaced the **identical** drift in four additional prose
-  bodies: `roles/developer.md` and `references/commit-convention.md` (lifecycle),
-  `skills/loom-eval-plan/SKILL.md` and `skills/loom-run/SKILL.md` (self-commit), and
-  `references/orchestration.md` (local-main authority). Leaving these unfixed would ship an
-  internally inconsistent remediation (the exact defect class this slice exists to remove), so
-  they are folded into Steps 2-4 and added to the allowlist. This is a deliberate, disclosed
-  expansion of the named set for coherence — flagged here for explicit review.
-- **ADR 0026 provenance.** The ADR file is absent from `origin/main`/HEAD `06246d0`; it lives on
+  drift. The Step 5 census surfaced the **identical** drift in additional prose bodies beyond the
+  named set: lifecycle — `roles/developer.md`, `references/commit-convention.md`,
+  `skills/loom-playbook/SKILL.md`; self-commit — `skills/loom-eval-plan/SKILL.md`,
+  `skills/loom-run/SKILL.md`, `references/orchestration.md:24-25`; local-`main` —
+  `references/orchestration.md:340/354/373`, `parallelism.md:150/402`. Leaving any unfixed would
+  ship an internally inconsistent remediation (the exact defect class this slice exists to remove),
+  so they are folded into Steps 2-4 and added to the allowlist. This is a deliberate, disclosed
+  expansion of the named set for coherence — flagged here for explicit review. The census also
+  records the deliberate **LEAVE** set (correct usage that must not be overcorrected):
+  `parallelism.md:78/121/379` (working base + index bucket) and every producer-role/rubric/
+  orchestrator commit hit under Pattern B.
+- **ADR 0026 provenance.** The ADR file is absent from `origin/main` and this branch; it lives on
   the staging branch at commit `b2614ce` (blob `914090db`, Status: Plan Review). This slice both
   carries it into `main` and flips its Status to Accepted — its own landing rides the pre-existing
   `.docs/**` allowlist, so it does not depend on the broadening it enacts (ADR 0026 §5, non-circular).
