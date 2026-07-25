@@ -268,6 +268,29 @@ Make schema initialization genuinely fail closed:
 
 ## M2 — Make remote publication the landing boundary
 
+**Deferred bootstrap inputs (governance-baseline-reconciliation, 2026-07-24; see
+`progress.md`).** Two items were surfaced while planning the bootstrap transition and
+explicitly deferred here rather than resolved by an ADR mid-bootstrap:
+
+- **ADR 0023 §7 single-session publication precondition.** §7's `remote-direct`
+  bootstrap procedure is safe only under single-owner, single-session, fresh-fetch
+  operation; it assumes no concurrent publisher. This M2 production landing helper
+  must supply the multi-session publication coordination §7 does not — the
+  `publication-intent` blocking scheme is bootstrap-scoped and does not by itself
+  solve cross-session/cross-clone publication races (see the "Document the
+  coordination boundary" note under `landing-authority-and-modes` above). Treat this
+  as an explicit design input to `landing-authority-and-modes` / the landing helper,
+  not an afterthought.
+- **§7 / M2 duplication.** ADR 0023 §7's bootstrap remote-direct ceremony
+  deliberately duplicates the production landing helper this milestone builds. That
+  duplication is intentional and time-bounded: at `remote-first-integration-candidate`
+  settlement, §7 bootstrap landing retires (spec 03's "Repository self-hosting
+  bootstrap transition" section / spec 04's `remote-direct` landing-eligible-set
+  prose) and every later publication — including the ADR-0024 dogfood slices and the
+  ADR-0025 `docs-governance/v1` class — uses this production helper instead. No
+  separate de-duplication ADR is needed; `remote-first-integration-candidate`'s own
+  settlement is the retirement event.
+
 Purpose: prevent unrelated completed slices from accumulating on local `main`
 and being pushed as one batch. A session lands only its own reviewed integration
 candidate, and remote state—not local `main`—determines whether it is landed.
