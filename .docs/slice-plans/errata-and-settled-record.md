@@ -1,6 +1,6 @@
 # errata-and-settled-record
 
-Status: In Progress
+Status: Implemented
 Target specs: none (docs-only record-keeping slice; no frozen-spec edits)
 Authority: post-M1-slice-1 alignment audit (2026-07-24); records outcomes into the
 durable status/index docs per spec 03 (`Landed`/`Archived` on settlement) and appends to
@@ -251,3 +251,17 @@ Mechanical checks, all from repo root, expected results named:
   (`state.json` + intents), not the settled code — hence this slice reconciles the record
   against `main`, which is where the slices landed.
 - No spec, ADR, `state.json`, receipt, or product/code file is touched by this slice.
+
+## Implementation Record
+
+All 9 Steps applied exactly as written (both archive `Status:` lines flipped;
+`slice-plans/README.md`, `evaluations/README.md`, `roadmap.md`, `progress.md`,
+`handoff.md`, `CLAUDE.md` reconciled; four errata appended to `progress.md` §
+"M0 errata" as a new "Remediation-1 audit errata" subsection; 48→12 miscount fixed
+in all four target files). Applied the eval's four MINOR verification-precision
+fixes (`rg -U`, scoped current-state checks past the `handoff.md` archive-log tail,
+including the `0.` NEXT-ACTION item found outside the "Where things stand" block).
+`git diff --stat HEAD~1 HEAD` (excluding the separate `Status: In Progress` commit)
+lists exactly the 8 non-plan boundary paths. `scripts/check` green (Bats + link +
+plugin-validation + whitespace checks all pass). All 9 named errata SHAs verified
+`commit` via `git cat-file -t`.

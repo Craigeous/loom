@@ -16,8 +16,8 @@ source of truth; `roadmap.md` is milestone order.
 
 ## Where things stand
 
-- **M1 slice 1 `coord-identifier-boundaries` COMPLETE (pending publication
-  settlement).** Centralized identifier validation landed in
+- **M1 slice 1 `coord-identifier-boundaries` SETTLED (ADR-0023 receipt; result
+  main 00582aa).** Centralized identifier validation landed in
   `plugins/loom/bin/loom-coord`: two-grammar split — strict `_valid_identifier`
   (session ids, decoded-blob sids, PIDs) vs. narrow `_valid_slice_name`
   (held-claims line format, preserving the `:`/`..` freeform-slice capability);
@@ -26,10 +26,13 @@ source of truth; `roadmap.md` is milestone order.
   sweep case flips to quarantine (plan-authorized). 18 new `NEG-ID` negatives
   (82/82 `loom-coord.bats`); `LOOM_DIFF_BASE=HEAD scripts/check` green 452/452.
   Plan-eval FAILed round 0 (slice-name grammar broke `SC1`/`V5b`) → revised →
-  Approved. Bootstrap `/code-review`+`/security-review` clean at 4 MINOR (T1-T3
+  Approved. Bootstrap review — three cold auxiliary workers
+  (correctness/tests/security), loom-repository-bootstrap/v1 degraded, not
+  loom-local-review/v1 (ADR 0023 §3) — clean at 4 MINOR (T1-T3
   secondary-call-site test-coverage gaps, T4 a NEG-ID count doc miscount);
-  code-eval PASS round 0. `Status: Ready to Publish` (ADR 0023 §4). Slice-plan
-  archived. **NEXT ACTION: plan M1 slice 2 `coord-lock-ownership`** (per
+  code-eval PASS round 0. `Status: Landed/Archived — settled (ADR-0023 receipt)`.
+  Slice-plan archived. **NEXT ACTION: plan M1 slice 2 `coord-lock-ownership`**
+  (after this remediation-1 record-keeping slice; per
   `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety"). Also
   landed on `main` during this slice (separate commit): `0ae81c1`, a Linux CI
   `stat -f` GNU/BSD portability fix — hosted CI green both lanes.
@@ -50,25 +53,25 @@ source of truth; `roadmap.md` is milestone order.
   `Status: Plan Review` (`.docs/slice-plans/coord-identifier-boundaries.md`) — a
   code-bearing bootstrap slice; next action is a cold ADR 0023 bootstrap plan
   evaluation.
-- **`macos-dual-client-dogfood` is complete and slice-plan-archived, pending ADR-0023
-  publication settlement — this is the next action.** Resolving code-eval PASS round 0
-  (head `a000cef`) after a bootstrap `/code-review` FAIL round 0 (dogfood-harness
+- **`macos-dual-client-dogfood` is complete, slice-plan-archived, and settled**
+  (ADR-0023 receipt; result `2a4700d`, target `main`). Resolving code-eval PASS round 0
+  (head `a000cef`) after a bootstrap review — three cold auxiliary workers
+  (correctness/tests/security), loom-repository-bootstrap/v1 degraded, not
+  loom-local-review/v1 (ADR 0023 §3) — FAIL round 0 (dogfood-harness
   injection-coverage gaps + cleanup hardening) was fixed and reverified green
   (`LOOM_DIFF_BASE=HEAD scripts/check` exit 0, 434/434 Bats). Delivered: shared
   `loom-*` workflow skills + canonical `roles/*.md` contracts with thin Claude/Codex
   adapters; `loom-resolve-helper`; one shared `hooks.json` with policy/wire split
-  (48-case `hook-wire-v1` fixtures); `loom-launch-role`; and a fail-closed macOS
+  (12-case hook-wire-v1 product, 2 clients × 2 events × 3 outcomes; 48 fixture
+  files at 4/case); `loom-launch-role`; and a fail-closed macOS
   dogfood harness proven against real Claude 2.1.218 + Codex 0.144.6 in isolated
   homes (full native install/reinstall/uninstall/marketplace-remove lifecycle for
   both clients; Codex's cold role-launch leg is `infrastructure-blocked` — a live
   `401` from a by-design credential-less isolated `CODEX_HOME`, not a product
   defect). Private Apple-silicon dogfood-ready; **not** a public release, **not**
   public Codex support, and does **not** reduce mandatory Linux/macOS-Intel
-  obligations. Status is `Ready to Publish` per ADR 0023 §4 — the slice claim and
-  evidence are retained until the root orchestrator runs the protected ADR-0023
-  intent/receipt/settlement sequence. **NEXT ACTION: publish this candidate**
-  (intent → non-force target update → fresh receipt → settlement), then decide the
-  next owner-directed slice.
+  obligations. **Single consistent next action: M1 slice 2 `coord-lock-ownership`**
+  (after the remediation slices) — see the coord block above.
 
 - **Prior checkpoint (settled):** the macOS program amendment. M0 is verified and
   settled on remote `main` at `51b249e`. Accepted ADR 0024 and its ratification
@@ -321,11 +324,11 @@ source of truth; `roadmap.md` is milestone order.
   read-filter false-positive documented as accepted limitation in
   `commit-convention.md`, commit d35b565).
 
-0. **NEXT ACTION — plan M1 slice 2 `coord-lock-ownership`.** M1 slice 1
-   (`coord-identifier-boundaries`) is COMPLETE (`Ready to Publish`, pending
-   publication settlement) — see "Where things stand" above. Per
-   `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety",
-   `coord-lock-ownership` is next, then `coord-schema-cas`.
+0. **NEXT ACTION — plan M1 slice 2 `coord-lock-ownership`** (after this
+   remediation-1 record-keeping slice). M1 slice 1 (`coord-identifier-boundaries`)
+   is SETTLED (ADR-0023 receipt; result main `00582aa`) — see "Where things stand"
+   above. Per `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator
+   safety", `coord-lock-ownership` is next, then `coord-schema-cas`.
 
 0. **COMPLETED (historical) — owner-directed.** All post-M4 threads were
    **COMPLETE**: multi-session coordination (ADR 0014/0015/0016 → `loom-coord.sh` →

@@ -1,6 +1,6 @@
 # coord-identifier-boundaries
 
-Status: Ready to Publish
+Status: Archived
 Target specs: none (coordinator-safety code slice; no frozen-spec edits)
 Authority: [repository improvement plan](../repository-improvement-plan.md) § "M1 —
 Fix coordinator safety" → `### Slice: coord-identifier-boundaries`;

@@ -30,8 +30,9 @@ PASS/FAIL + severity rules are in
 - [macOS dual-client dogfood plan](macos-dual-client-dogfood-plan-eval.md) —
   plan evaluation history (Approved).
 - [macOS dual-client dogfood review findings](macos-dual-client-dogfood-review-findings.md)
-  — orchestrator-run `/code-review` + `/security-review` findings feeding the blind
-  code-evaluator as advisory input.
+  — bootstrap review — three cold auxiliary workers (correctness/tests/security),
+  loom-repository-bootstrap/v1 degraded, not loom-local-review/v1 (ADR 0023 §3) —
+  findings feeding the blind code-evaluator as advisory input.
 - [macOS dual-client dogfood code evaluation](macos-dual-client-dogfood-eval.md) —
   FAIL round 0 (harness injection-coverage + cleanup hardening) → fix → resolving
   PASS round 0; `Ready to Publish` pending ADR-0023 settlement.
@@ -39,8 +40,10 @@ PASS/FAIL + severity rules are in
   — FAIL round 0 (slice-name grammar over-restriction breaking SC1/V5b) → revised →
   Approved.
 - [coord-identifier-boundaries review findings](coord-identifier-boundaries-review-findings.md)
-  — bootstrap `/code-review`+`/security-review`, 4 MINOR findings (T1-T4: secondary
-  call-site test-coverage gaps + a NEG-ID doc miscount), no BLOCKER/MAJOR.
+  — bootstrap review — three cold auxiliary workers (correctness/tests/security),
+  loom-repository-bootstrap/v1 degraded, not loom-local-review/v1 (ADR 0023 §3) —
+  4 MINOR findings (T1-T4: secondary call-site test-coverage gaps + a NEG-ID doc
+  miscount), no BLOCKER/MAJOR.
 - [coord-identifier-boundaries code evaluation](coord-identifier-boundaries-eval.md) —
   PASS round 0 (M1 slice 1); all four review findings adjudicated CONFIRMED MINOR,
   non-blocking; `Ready to Publish` pending ADR-0023 settlement.

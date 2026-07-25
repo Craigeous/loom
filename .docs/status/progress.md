@@ -6,8 +6,8 @@ The status source of truth and decision index for building loom.
 
 ## Current state
 
-- **Last action — M1 slice 1 `coord-identifier-boundaries` COMPLETE (pending
-  publication settlement).** Centralized identifier validation landed in
+- **Last action — M1 slice 1 `coord-identifier-boundaries` SETTLED (ADR-0023
+  receipt; result main 00582aa).** Centralized identifier validation landed in
   `plugins/loom/bin/loom-coord`: a two-grammar split — strict `_valid_identifier`
   (session ids, decoded-blob sids, PIDs: no `/`, no `..`, no whitespace/control
   bytes) and narrow `_valid_slice_name` (held-claims line format only, preserving
@@ -19,21 +19,23 @@ The status source of truth and decision index for building loom.
   flip + 18 new = 82/82); `LOOM_DIFF_BASE=HEAD scripts/check` green, 452/452 Bats.
   Plan-eval FAILed round 0 (slice-name grammar over-restriction breaking two
   existing tests `SC1`/`V5b`) → revised to the two-grammar split → Approved.
-  Bootstrap sealed-package review (`/code-review` + `/security-review`) clean at 4
-  MINOR (T1-T3 secondary-call-site test-coverage gaps — `cmd_session_bootstrap`/
+  Bootstrap review — three cold auxiliary workers (correctness/tests/security),
+  loom-repository-bootstrap/v1 degraded, not loom-local-review/v1 (ADR 0023 §3) —
+  clean at 4 MINOR (T1-T3 secondary-call-site test-coverage gaps — `cmd_session_bootstrap`/
   `cmd_session_end` quarantine-skip path, `cleanup --session` negative,
   `cmd_release_claim`/`cmd_reclaim` bad-slice-name negative — plus T4 a NEG-ID
   count doc miscount in the plan's Implementation Record, 17 vs actual 18); no
-  BLOCKER/MAJOR. Code-eval PASS round 0; `Status: Ready to Publish` (ADR 0023 §4 —
-  not `Landed` until remote settlement). The four MINORs are an optional future
-  pass, not a blocking follow-up. Slice-plan archived to
+  BLOCKER/MAJOR. Code-eval PASS round 0; `Status: Landed/Archived — settled on
+  remote main at 00582aa (ADR-0023 publication receipt)`. The four MINORs are an
+  optional future pass, not a blocking follow-up. Slice-plan archived to
   `.docs/slice-plans/archive/coord-identifier-boundaries.md`.
   **Also landed on `main` during this slice (separate commit, not part of the
   slice diff):** `0ae81c1` — a Linux CI portability fix for `dir_mtime_epoch`'s
   GNU-vs-BSD `stat -f` divergence (T1 from the earlier multi-session-lock-helper
   thread, see `handoff.md`); hosted CI is green on both lanes.
 - **Next action:** plan the M1 slice 2 `coord-lock-ownership` slice (per
-  `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety").
+  `.docs/repository-improvement-plan.md` § "M1 — Fix coordinator safety"), after
+  this remediation-1 record-keeping slice.
 - **Last action (owner decisions, 2026-07-24 — governance deferred-decisions
   resolved).** Two owner decisions were recorded and the governance slice's two
   deferred owner questions are now settled:
@@ -59,13 +61,15 @@ The status source of truth and decision index for building loom.
   (Superseded — next action above: M1 slice 1 is now complete; proceed to slice 2
   `coord-lock-ownership`.)
 - **Phase:** **Private Apple-silicon dual-client dogfood checkpoint reached.**
-  `macos-dual-client-dogfood` is `Ready to Publish` (resolving code-eval PASS round
-  0, archived) pending the protected ADR-0023 intent/receipt/settlement sequence,
-  which the root orchestrator runs next. No further slice work is queued.
-- **Last action:** **`macos-dual-client-dogfood` slice reached `Ready to Publish`**
-  (code-eval resolving PASS round 0, head `a000cef`). Full loop: plan Approved round
+  `macos-dual-client-dogfood` is settled (ADR-0023 publication receipt; result
+  `2a4700d`, `verified_target_ref refs/heads/main`). No further slice work is queued.
+- **Last action:** **`macos-dual-client-dogfood` slice settled**
+  (code-eval resolving PASS round 0, head `a000cef`; ADR-0023 publication receipt,
+  result `2a4700d`, `verified_target_ref refs/heads/main`). Full loop: plan Approved round
   0 → five implementation/live-run developer passes (Steps 2-10) → orchestrator-run
-  `/code-review` + `/security-review` bootstrap review FAILed round 0 on the
+  bootstrap review — three cold auxiliary workers (correctness/tests/security),
+  loom-repository-bootstrap/v1 degraded, not loom-local-review/v1 (ADR 0023 §3) —
+  FAILed round 0 on the
   fail-closed dogfood harness's untested injection-recovery branches and quarantine
   cleanup hardening → developer fix (6 new load-bearing Bats injection cases proven
   by break/observe-red/restore-green, plus C1 containment + S1 `runId`-charset
@@ -73,8 +77,9 @@ The status source of truth and decision index for building loom.
   exit 0, 434/434 Bats). Delivered: shared `loom-*` Agent Skill workflow bodies +
   canonical `roles/*.md` contracts with thin Claude/Codex adapters; `loom-resolve-
   helper` (installed-root helper resolution for both clients); one shared
-  `hooks.json` with policy/wire split at the executable boundary (48-case
-  `hook-wire-v1` fixture Cartesian product); `loom-launch-role` (sole,
+  `hooks.json` with policy/wire split at the executable boundary (12-case
+  hook-wire-v1 product, 2 clients × 2 events × 3 outcomes; 48 fixture files at
+  4/case); `loom-launch-role` (sole,
   compatibility-matrix-driven client role launcher); and a fail-closed macOS dogfood
   harness (hash-chained supervisor/worker journal; prepare/exercise/uninstall/clean;
   resume/quarantine/cleanup reconciliation). **Live evidence** (five real-run
@@ -88,9 +93,9 @@ The status source of truth and decision index for building loom.
   `.docs/evaluations/macos-dual-client-dogfood-evidence.json`. This slice makes loom
   **privately Apple-silicon dual-client dogfood-ready**; it is **not** a public
   release, does **not** claim public Codex support, and does **not** reduce the
-  mandatory Linux/macOS-Intel v0.2 release obligations. Per ADR 0023 §4 the slice
-  advances to `Ready to Publish`, not `Landed`, until fresh remote verification and
-  receipt.
+  mandatory Linux/macOS-Intel v0.2 release obligations. Per ADR 0023 §4 the slice is
+  settled (ADR-0023 publication receipt; result `2a4700d`, `verified_target_ref
+  refs/heads/main`).
 - **Last action:** accepted ADR 0024 was integrated without rewriting; the improvement
   plan, spec index and eight frozen specs, canonical project instructions, CLAUDE/AGENTS
   adapters, README, and indexes were synchronized. The exact `ee37a20` review candidate
@@ -672,6 +677,54 @@ record depended on it. **Owner decision (2026-07-24): DELETE.** On the strength 
 that zero-reference scan the owner directed deletion of
 `loom/bootstrap-authority-b28a747`; the remote branch is deleted. This closes the
 keep-vs-delete question the governance slice deferred to the owner.
+
+**Remediation-1 audit errata (2026-07-24, record-keeping only).** A 2026-07-24
+alignment audit surfaced four further integrity/process errata beyond the M0 set
+above. History is immutable; nothing below is rewritten or re-authored — this is a
+factual record of what happened. Two of these raise DECISIONS (not record-keeping)
+deferred to a remediation-2 spec/ADR cycle + owner (see the deferred-decisions note
+in `errata-and-settled-record.md`'s Notes):
+
+(a) **ADR 0006 rewritten in place post-acceptance — integrity erratum.** Commit
+`5e0b178` ("Build M1 scaffold …") modified the already-accepted
+`.docs/ADR/0006-distribution-self-marketplace.md` (26 lines changed; message notes
+"updated ADR 0006") without a superseding ADR. This violates ADR immutability
+(supersede, never rewrite). The ADR is immutable; this is acknowledged, not
+corrected — recording it does not re-open the ADR. Any correction is a new ADR cycle
+(deferred). Proof: `git show --stat 5e0b178 | grep 0006`.
+
+(b) **coord-identifier-boundaries published from a rebased, not rebuilt+re-reviewed,
+head.** ADR 0023 §7 step 4 requires, on a moved target, discard-and-rebuild from the
+new exact base then re-run §3/§4. The reviewed head was `82d689f` (base `c899673`);
+the published head `00582aa` is that slice rebased onto `origin/main 0ae81c1` (Linux
+CI fix). Instead of a rebuild + fresh review, a byte-identical-diff argument +
+re-gate was substituted (loom-coord reviewed diff byte-identical pre/post rebase;
+rebased head re-gated green 452/452). This is disclosed honestly in the transition
+`state.json` `rebase_note` but was absent from `.docs/`; recorded here for the
+durable record. Proof: `git merge-base --is-ancestor 0ae81c1 82d689f` → false;
+`... 00582aa` → true; `rebase_note` in `state.json` at
+`origin/loom/bootstrap-transition`.
+
+(c) **Code-bearing Linux CI fix direct-pushed to `main` outside the
+slice/review/settlement path.** `0ae81c1` ("Fix Linux CI: GNU stat -f …") is a code
+change that landed directly on `main` (single-parent linear commit) with no slice
+plan, no bootstrap review, and no publication settlement; per the audit, hosted
+`main` stayed red ~6h and the macOS dogfood settlement `32c5315` was recorded while
+hosted CI was failing. The CI-timing detail is an audit finding (not locally
+reconstructable); the direct-push and single-parent shape are verifiable. Proof:
+`git log -1 --format='%P' 0ae81c1` (one parent `c8996731`); `git merge-base
+--is-ancestor 0ae81c1 origin/main` → true.
+
+(d) **Four additional non-uniform-identity commits on the transition branch
+itself.** Beyond the 13 counted in erratum (a) above of the `c7bd84d..a3cb007`
+range, four commits on `origin/loom/bootstrap-transition` carry `Loom
+<loom@localhost>` (ADR 0003 non-uniform identity), and each is outside that earlier
+range: `367584c` ("Initialize protected Loom bootstrap transition state"),
+`e2248d8` ("Authorize macOS dual-client dogfood slices"), `099c4f4` ("Prepare ci
+baseline publication intent"), `4189c02` ("Settle ci baseline publication"). Proof:
+for each SHA, `git log -1 --format='%ae'` → `loom@localhost`, and `git merge-base
+--is-ancestor <sha> origin/loom/bootstrap-transition` → true while the SHA is not in
+`git rev-list c7bd84d..a3cb007`.
 
 ## Accepted decisions (ADRs)
 

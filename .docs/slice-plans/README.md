@@ -18,18 +18,14 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 ## Active plans
 
 - [errata-and-settled-record.md](errata-and-settled-record.md) — `Plan Review` —
-  docs-only record-keeping (remediation-1): flip the two settled archived plans
-  (`macos-dual-client-dogfood`, `coord-identifier-boundaries`) to `Archived`, reconcile
-  the status/index docs to settled reality, reconcile `handoff.md`'s contradictory NEXT
-  ACTION to `M1 slice 2 coord-lock-ownership`, append four 2026-07-24 audit errata
-  (ADR-0006 in-place rewrite; rebase-not-rebuild publication; direct-pushed CI fix; four
-  transition-branch non-uniform-identity commits), and fix the 48→12 hook-wire miscount.
-  No spec/ADR/state.json/product edits.
+  docs-only record-keeping: flip the two settled archived plans to Archived, reconcile
+  status/index docs to settled reality, append four audit errata + fix three doc-drift
+  miscounts.
 
 ## Archived plans
 
 - [archive/coord-identifier-boundaries.md](archive/coord-identifier-boundaries.md) —
-  `Ready to Publish` (pending ADR-0023 publication settlement) — M1 slice 1
+  `Archived` (settled on `main` at `00582aa`; ADR-0023 receipt) — M1 slice 1
   coordinator-safety: centralized identifier validation in `plugins/loom/bin/loom-coord`
   via a two-grammar split — the strict `_valid_identifier` (session ids, decoded-blob
   sids, PIDs: no `/`, no `..`, no whitespace/control bytes) and the narrow
@@ -47,11 +43,12 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
   PR-#3-vs-remote-direct mismatch, incomplete ci-baseline evidence), M0-Landed precision,
   PR/branch hygiene record + b28a747 zero-reference scan. Code-eval PASS round 0.
 
-- [archive/macos-dual-client-dogfood.md](archive/macos-dual-client-dogfood.md) — `Ready to
-  Publish` (pending ADR-0023 publication settlement) — implemented and privately proved the
+- [archive/macos-dual-client-dogfood.md](archive/macos-dual-client-dogfood.md) — `Archived`
+  (settled on `main` at `2a4700d`; ADR-0023 receipt) — implemented and privately proved the
   shared Claude/Codex workflows and role contracts, `loom-resolve-helper` installed-root
-  resolution, the split hook-policy/wire executable behind one shared `hooks.json` (48-case
-  `hook-wire-v1` fixture Cartesian product), `loom-launch-role` (compatibility-matrix-driven
+  resolution, the split hook-policy/wire executable behind one shared `hooks.json` (12-case
+  hook-wire-v1 product, 2 clients × 2 events × 3 outcomes; 48 fixture files at 4/case),
+  `loom-launch-role` (compatibility-matrix-driven
   client launcher), and a fail-closed macOS dogfood harness (hash-chained supervisor/worker
   journal, resume/quarantine/cleanup) on Apple silicon. Five live-run passes against real
   Claude 2.1.218 and Codex 0.144.6 fixed five real product bugs and completed the full native

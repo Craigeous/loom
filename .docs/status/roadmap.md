@@ -18,15 +18,16 @@ Milestone order for building loom. "What's next and why"; detailed status in
   a product defect).
 - [ ] **M1 — Fix coordinator safety** (in progress): `[x] coord-identifier-boundaries`
   (centralized `loom-coord` identifier validation — session ids, decoded-blob sids,
-  PIDs, slice names; `Ready to Publish` pending settlement); next
+  PIDs, slice names; settled on `main` at `00582aa` (ADR-0023 receipt)); next
   `coord-lock-ownership`, then `coord-schema-cas`.
 
-M0 is authoritative at settled remote result `51b249e`. Both the program-amendment and
-`macos-dual-client-dogfood` checkboxes are prospective until each candidate's
-configured remote target and protected transition settlement verify the exact
-publication. ADR 0019's Ubuntu and both macOS architecture release matrix remains
-unchanged and mandatory; this checkpoint is a private Apple-silicon dogfood milestone
-only, not a public release or public Codex support.
+M0 is authoritative at settled remote result `51b249e`. The program-amendment
+checkbox is prospective until its configured remote target and protected transition
+settlement verify the exact publication; `macos-dual-client-dogfood` is now settled
+(ADR-0023 receipt; result `2a4700d`, target `main`). ADR 0019's Ubuntu and both macOS
+architecture release matrix remains unchanged and mandatory; this checkpoint is a
+private Apple-silicon dogfood milestone only, not a public release or public Codex
+support.
 
 **M0 Landed — precise scope.** M0 covers a static reproducible local-gate baseline plus
 a macOS-arm64 behavioral dogfood pass; the Codex cold-launch leg is
