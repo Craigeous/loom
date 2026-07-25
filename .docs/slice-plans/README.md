@@ -17,12 +17,14 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
-- [errata-and-settled-record.md](errata-and-settled-record.md) — `Plan Review` —
-  docs-only record-keeping: flip the two settled archived plans to Archived, reconcile
-  status/index docs to settled reality, append four audit errata + fix three doc-drift
-  miscounts.
+*(none)*
 
 ## Archived plans
+
+- [archive/errata-and-settled-record.md](archive/errata-and-settled-record.md) — `Archived` —
+  docs-only record-keeping: flipped the two settled archived plans to Archived, reconciled
+  status/index docs to settled reality, appended four audit errata + fixed three doc-drift
+  miscounts. Code-eval PASS round 0; landed 87b72c9.
 
 - [archive/coord-identifier-boundaries.md](archive/coord-identifier-boundaries.md) —
   `Archived` (settled on `main` at `00582aa`; ADR-0023 receipt) — M1 slice 1
