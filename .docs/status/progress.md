@@ -726,6 +726,36 @@ for each SHA, `git log -1 --format='%ae'` → `loom@localhost`, and `git merge-b
 --is-ancestor <sha> origin/loom/bootstrap-transition` → true while the SHA is not in
 `git rev-list c7bd84d..a3cb007`.
 
+**Remediation-2 reconciliation errata (2026-07-25, record-keeping only).** History is
+immutable; nothing below is rewritten or re-authored — this is a factual record.
+
+- **This reconciliation slice itself.** `docs-governance-reconciliation` is the first
+  `docs-governance/v1` §7 slice landed under accepted ADR 0025. It carries ADR 0025's
+  `Status: Accepted` disposition to `main` and implements the eight deferred
+  reconciliation edits ADR 0025 Consequences named (accept ADR 0025 + index it;
+  restore ADR 0006's pre-rewrite body + forward-pointer note; correct 0014-0017
+  `Status: Approved` → `Accepted`; harmonize specs 03/04 `## Authority` and
+  closed-list/landing prose; consolidate ADR path/cross-reference errata; fold the
+  deferred §7/M2 items into the improvement plan; record this errata subsection;
+  update `handoff.md`'s NEXT ACTION). Its §7 evidence is blind plan-eval + a distinct
+  cold docs code-eval over the `base..head` diff + `scripts/check` green — no §3
+  three-finder package, per ADR 0025 §B.2 (docs-governance class, no
+  product/executable/test change).
+- **The CI-window deviation.** Commits `87b72c9` and `9aa60e8` (the errata-slice
+  finalize's archive + plan-approval record) left `main` red on hosted CI for
+  approximately one cycle via a dangling-index-link regression introduced by that
+  finalize. It was fixed at `fe9aca2` ("Fix dangling errata index link + stale
+  status (regression from 87b72c9 finalize)"). Recorded as a factual deviation;
+  nothing is rewritten.
+- **Two additional pre-rule direct pushes now closed by ADR 0025.** `b1ba112`
+  ("Author ADR 0025 reconciliation-authority-plugin-root-no-bypass-landing (Plan
+  Review)") and `fe9aca2` (the dangling-link hotfix above) are both docs-only direct
+  pushes to `main` that predate ADR 0025 Decision B (the no-direct-push-bypass rule).
+  Both are B.3-class recorded pre-rule deviations — historical facts, not violations
+  of a rule not yet in force — and are closed going forward by ADR 0025's no-bypass
+  rule: every later commit advancing `origin/main` lands through ADR 0023 §7 (or its
+  M2 successor), with no direct-push bypass class remaining.
+
 ## Accepted decisions (ADRs)
 
 0001 plugin/orchestrator · 0002 model tiers · 0003 commit-per-handoff · 0004 blind
