@@ -9,7 +9,7 @@ ADRs [0001](../ADR/0001-plugin-architecture-and-orchestrator.md),
 [0012](../ADR/0012-thin-orchestrator-sonnet-default-bounded-return.md) through
 [0018](../ADR/0018-shared-core-and-client-adapters.md), and
 [0020](../ADR/0020-remote-publication-is-the-landing-authority.md) through
-[0023](../ADR/0023-repository-self-hosting-bootstrap-transition.md).
+[0025](../ADR/0025-reconciliation-authority-plugin-root-no-bypass-landing.md).
 
 ## Identity and adapter boundary
 
@@ -98,7 +98,12 @@ as available. The closed set is M0 `ci-baseline` and
 `local-review-defect-battery`; and M5 `sanitized-evaluation-workspace` and
 `evaluation-output-recorder`. Only ADR 0023's degraded cold ratification evaluation
 and a plan evaluation solely authorizing one listed slice receive analogous plan
-eligibility. No other artifact, slice, milestone, repository, or workflow is eligible.
+eligibility. No other artifact, slice, milestone, repository, or workflow is eligible,
+except as extended, by accepted ADR only: ADR 0024 admits the two named dogfood
+slices recorded in the "ADR 0024 dogfood bootstrap dispatch" subsection below, and
+ADR 0025 admits the persistent `docs-governance/v1` slice class (each member still
+individually planned, blind plan-evaluated, path-confined, gated, and settled).
+Neither extension reopens the set to arbitrary addition.
 
 ### Bootstrap planning-artifact evaluation
 
@@ -287,6 +292,13 @@ rerun. Publication uses an explicit non-force `<sha>:<full-target-ref>` refspec 
 successful only after a fresh read proves the target and checked tree exactly match.
 It never falls back to PR, merge queue, a protected target, force, or another mode.
 
+This landing-eligible set is likewise extended, by accepted ADR only, to the ADR-0024
+named dogfood slices and to the ADR-0025 `docs-governance/v1` class: each also lands
+via this `remote-direct` procedure while `bootstrap-landing` remains available, and
+switches to the production landing helper once `bootstrap-landing` retires at
+`remote-first-integration-candidate` settlement, the same as every other eligible
+slice. No new exception is created.
+
 Settlement of `remote-first-integration-candidate` retires bootstrap landing;
 `local-review-orchestration` retires auxiliary bootstrap review;
 `sanitized-evaluation-workspace` retires bootstrap export and gate rerun; and
@@ -450,3 +462,15 @@ correctness, tests, and security workers and then a distinct cold code evaluator
 Changed target/state invalidates the package and requires rebuild/re-evaluation.
 Publication uses the ADR-0023 prepare-intent → target update → verify/receipt → settle
 order without force or mode fallback.
+
+### ADR 0025 reconciliation
+
+Accepted ADR 0025 authorizes this reconciliation (owner-authorized correction, not a
+re-decision): added ADR 0024 and ADR 0025 to `## Authority`; harmonized the
+"closed set" eligibility statement and the `remote-direct` landing-eligible-set
+statement above with the already-landed ADR 0024 dogfood-slice dispatch and the new
+ADR-0025 `docs-governance/v1` persistent slice class, additively — every invariant
+these statements protect is unchanged: the set stays closed and changeable only by an
+accepted ADR, no force update is permitted, `remote-direct` remains repository-only
+and non-force, and it retires the same way for every eligible slice at
+`remote-first-integration-candidate` settlement. No prior decision prose is rewritten.

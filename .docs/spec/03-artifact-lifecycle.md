@@ -12,7 +12,11 @@ ADRs [0003](../ADR/0003-cold-handoffs-commit-per-handoff.md),
 [0021](../ADR/0021-loom-owned-local-review-protocol.md), and
 [0022](../ADR/0022-controlled-input-independent-evaluation.md), with the temporary
 repository-only transition authorized by
-[0023](../ADR/0023-repository-self-hosting-bootstrap-transition.md).
+[0023](../ADR/0023-repository-self-hosting-bootstrap-transition.md), the dogfood
+bootstrap amendment in
+[0024](../ADR/0024-macos-first-dual-client-dogfood-bootstrap-amendment.md), and the
+reconciliation authority in
+[0025](../ADR/0025-reconciliation-authority-plugin-root-no-bypass-landing.md).
 
 Status is a dispatcher, not proof by itself. The orchestrator combines artifact
 status with commits, validated review/evaluation evidence, coordination state, and
@@ -125,6 +129,14 @@ only another accepted ADR may change it. Bootstrap evidence is historical transi
 evidence and can never become release, adapter, local-review/v1, or controlled-input
 conformance evidence.
 
+The closed list above has been extended twice, each time by an accepted ADR, not by
+this spec: ADR 0024 admits the two named dogfood slices recorded in the "ADR 0024
+dogfood slice eligibility" subsection below, and ADR 0025 admits the persistent
+`docs-governance/v1` slice class (each member still individually planned, blind
+plan-evaluated, path-confined, gated, and settled). Neither extension reopens the
+list to arbitrary addition; each remains an accepted-ADR-only, individually named
+or narrowly classed admission.
+
 For an eligible code-bearing slice, and only while the corresponding transition-state
 components remain available, the production review/evaluation arrows above may
 temporarily be satisfied by all of the following, without changing the legal status
@@ -176,6 +188,14 @@ Only M0, M1, and `remote-first-integration-candidate` may use ADR 0023's reposit
 merge queue, force update, another repository, or managed-project publication. After
 settlement of `remote-first-integration-candidate`, every publication uses the
 production landing helper and its failure is infrastructure-blocked.
+
+This landing-eligible set is likewise extended, by accepted ADR only, to the ADR-0024
+named dogfood slices and to the ADR-0025 `docs-governance/v1` class: each also lands
+via this §7 `remote-direct` procedure while the `bootstrap-landing` component remains
+`available`, and switches — with everything else — to the production landing helper
+once `bootstrap-landing` retires at `remote-first-integration-candidate` settlement.
+No new exception is created; these named/classed additions ride the same procedure and
+the same retirement.
 
 Settlement retires bootstrap capabilities monotonically for every new or resumed run:
 
@@ -358,3 +378,15 @@ candidate, final exact gate, `publication-intent`, non-force remote-direct updat
 fresh target verification, untracked receipt, settlement/removal, and only then claim
 release. A local status token never establishes `Landed`. These are degraded bootstrap
 records, not `loom-local-review/v1`, ADR-0022 isolation, or release conformance.
+
+### ADR 0025 reconciliation
+
+Accepted ADR 0025 authorizes this reconciliation (owner-authorized correction, not a
+re-decision): added ADR 0024 and ADR 0025 to `## Authority`; harmonized the
+"closed"/"only" eligible-slice-list and remote-direct-landing statements above with
+the already-landed ADR 0024 dogfood-slice append and the new ADR-0025
+`docs-governance/v1` persistent slice class, additively — every invariant these
+statements protect is unchanged: the set stays closed and changeable only by an
+accepted ADR, no force update is permitted, `remote-direct` remains repository-only
+and non-force, and a local status token never establishes `Landed`. No prior decision
+prose is rewritten.
