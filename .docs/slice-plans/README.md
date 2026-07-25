@@ -17,6 +17,16 @@ Lifecycle: `Draft → Plan Review → Approved → In Progress → Implemented �
 
 ## Active plans
 
+- [playbook-conformance.md](playbook-conformance.md) — `Plan Review` —
+  remediation-3, the first `docs-governance/v1` §7 slice under ADR 0026's **broadened** class
+  (prose bodies of `plugins/loom/**/*.md`): lands ADR 0026 (Accepted + ADR/README index + the two
+  pre-placed 0026 records + evaluations index), then corrects three audit Theme-B prose drifts —
+  code-eval PASS advances to `Ready to Publish` not `Landed` (+ adds `Ready to Publish`/`Accepted`/
+  `Living` to status-machine.md; spec 03/ADR 0020); the evaluator writes to confined scratch and the
+  recorder/root commits (evaluator never mutates the checkout; spec 03/05); and local `main` is a
+  disposable mirror, not the landing authority (ADR 0020 remote-first). Prose-body-only; **no
+  frontmatter, no executables/tests/schemas** (ADR 0026 §3/§4.0).
+
 - [archive/docs-governance-reconciliation.md](archive/docs-governance-reconciliation.md) — `Plan Review` —
   first `docs-governance/v1` §7 slice under accepted ADR 0025: eight docs-only
   reconciliation edits (accept ADR 0025 + index; restore ADR 0006's pre-rewrite body +
