@@ -1,6 +1,6 @@
 # errata-and-settled-record
 
-Status: Plan Review
+Status: Approved
 Target specs: none (docs-only record-keeping slice; no frozen-spec edits)
 Authority: post-M1-slice-1 alignment audit (2026-07-24); records outcomes into the
 durable status/index docs per spec 03 (`Landed`/`Archived` on settlement) and appends to
